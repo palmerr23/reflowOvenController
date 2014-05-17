@@ -10,8 +10,11 @@
 #ifndef LCDMenu_h
 #define LCDMenu_h
 
+#include <LiquidCrystal.h>
+#define ENC_STEPS 1
+#include <ClickEncoder.h>
+
 #include "../MenuBase/MenuBase.h"
-#include "../LiquidCrystal/LiquidCrystal.h"
 
 class LCDMenu: public MenuDisplay {
 public: 
@@ -20,14 +23,17 @@ public:
 	void showCurrentValue();
 	void init(MenuItem *initial, LiquidCrystal *lcd, boolean fourkey);
 	void poll();
+
 	bool update;
 	
+	ClickEncoder *Encoder;
+
 private:
 	// the pins that we poll for button presses
 	//unsigned int okButton, upButton, downButton, backButton;
 	// actually, sod that, buttons live on portD.
 	
-	enum buttons{
+	enum buttons {
 		none,
 		ok,
 		back,
@@ -35,11 +41,13 @@ private:
 		down,
 		stop
 	};
+
 	buttons pressedKey, lastKey;
 	LiquidCrystal *LCD;
+	int16_t encMovement;
+
 	boolean fourkeys;
 	unsigned int counter;
-	
 };
 
 #endif
