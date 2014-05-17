@@ -1,10 +1,7 @@
 /*
  ESTechnical Reflow Oven Controller
  (c) 2012-2013 Ed Simmons
- 
- http://www.estechnical.co.uk
- http://www.estechnical.co.uk/reflow-controllers/t962a-reflow-oven-controller-upgrade
- http://www.estechnical.co.uk/reflow-ovens/estechnical-reflow-oven
+ (c) 2014 Karl Pitrich <karl@pitrich.com>
  */
 
 #include <EEPROM.h>

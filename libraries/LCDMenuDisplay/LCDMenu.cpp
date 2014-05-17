@@ -178,7 +178,10 @@ void LCDMenu::showCurrent () {
 	this->Current->Name_P ? LCD->print(this->Current->Name_P) : LCD->print(this->Current->Name);
 
 	LCD->setCursor(0, 3);
-	LCD->print ("OK  <   >   Back");
+	LCD->print ("OK  <   >");
+	if (this->Current && this->Current->Parent) {
+		LCD->print("   Back");
+	}
 }
 
 void LCDMenu::showCurrentValue() {
