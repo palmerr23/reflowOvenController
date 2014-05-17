@@ -14,7 +14,8 @@ After cloning this repository, you need to do
 
     git submodule update --init
 
-to fetch all involved libraries.
+to fetch all involved libraries. (See: [Submodule Cheat Sheet])
+
 
 Introduction
 ====================
@@ -102,5 +103,4 @@ Compile the firmware with Ctrl+R to test everything is installed correctly. Choo
 
 
 
-
-
+[Submodule Cheat Sheet]:http://blog.jacius.info/git-submodule-cheat-sheet/
