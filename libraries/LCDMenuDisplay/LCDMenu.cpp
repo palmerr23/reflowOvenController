@@ -21,9 +21,11 @@ void LCDMenu::init(MenuItem *initial, LiquidCrystal *lcd, boolean fourkey) {
 	// todo: pass the pins in for the LCD screen
 	LCD = lcd;
 
+#ifdef USE_CLICKENCODER
 	Encoder = new ClickEncoder(A1, A0, A2);
 	Encoder->setAccelerationEnabled(false);
-	
+#endif
+
 	fourkeys = fourkey;
 			
 	this->Current = initial;
@@ -32,7 +34,7 @@ void LCDMenu::init(MenuItem *initial, LiquidCrystal *lcd, boolean fourkey) {
 }
 
 
-#if 1
+#ifdef USE_CLICKENCODER
 void LCDMenu::poll() {
     encMovement = Encoder->getValue();
     if (encMovement) {
@@ -81,7 +83,7 @@ void LCDMenu::poll() {
 }
 #endif
 
-#if 0
+#ifndef USE_CLICKENCODER
 void LCDMenu::poll() {
 	// collect the state of PORTD to obtain the values of all the pins
 	// keys start at PD3

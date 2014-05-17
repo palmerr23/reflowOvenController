@@ -7,12 +7,9 @@
  http://www.estechnical.co.uk/reflow-ovens/estechnical-reflow-oven
  */
 
-
 #include <EEPROM.h>
 #include <PID_v1.h>
 #include <LiquidCrystal.h>
-#include <ClickEncoder.h>
-#include <TimerOne.h>
 
 #include <MenuBase.h>
 #include <LCDMenu.h>
@@ -22,6 +19,11 @@
 #include <MenuItemDouble.h>
 #include <MenuItemAction.h>
 #include <MenuItemIntegerAction.h>
+
+#ifdef USE_CLICKENCODER
+#include <ClickEncoder.h>
+#include <TimerOne.h>
+#endif
 
 // bump minor version number on small changes, major on large changes, eg when eeprom layout changes
 const char * ver = "2.6";
@@ -90,16 +92,16 @@ const char * ver = "2.6";
 tcInput A, B; // the two structs for thermocouple data
 
 // data type for the values used in the reflow profile
-struct profileValues {
+typedef struct profileValues_s {
   int soakTemp;
   int soakDuration;
   int peakTemp;
   int peakDuration;
   double rampUpRate;
   double rampDownRate;
-};
+} profileValues_t;
 
-profileValues activeProfile; // the one and only instance
+profileValues_t activeProfile; // the one and only instance
 
 int idleTemp = 50; // the temperature at which to consider the oven safe to leave to cool naturally
 int fanAssistSpeed = 50; // default fan speed
@@ -448,32 +450,27 @@ void setup() {
 
   myMenu.showCurrent();
 
+#ifdef USE_CLICKENCODER
   Timer1.initialize(1000);
   Timer1.attachInterrupt(timerIsr);
+#endif
 }
 
+#ifdef USE_CLICKENCODER
 void timerIsr() {
-//  static unsigned long last;
-//  unsigned long now;
-
   if (currentState == idle) {
     myMenu.Encoder->service();
-//    unsigned long now = millis();
-//    if (last + 10 < now) {
-//      last = now;
-//      myMenu.poll();
-//    }
   }
-
 }
+#endif
 
 void loop()
 {
   if (millis() - lastUpdate >= 100) {
-    #ifdef DEBUG
+#ifdef DEBUG
     Serial.print("freeMemory()=");
     Serial.println(freeMemory());
-    #endif
+#endif
 
     lastUpdate = millis();
 
@@ -539,10 +536,10 @@ void loop()
         else {
           Serial.print("999"); 
         }
-        #ifdef DEBUG
+#ifdef DEBUG
         Serial.print(",");
         Serial.print(freeMemory());
-        #endif
+#endif
         Serial.println();
       } 
       else {
@@ -564,15 +561,15 @@ void loop()
         else {
           Serial.print("999"); 
         }
-        #ifdef DEBUG
+#ifdef DEBUG
         Serial.print(",");
         Serial.print(freeMemory());
-        #endif
+#endif
         Serial.println();
       }
     }
 
-    #if BUTTON_STOP > 0
+#if BUTTON_STOP > 0
     // check for the stop or back key being pressed
     boolean stopPin = digitalRead(BUTTON_STOP); // check the state of the stop key
     if (stopPin == LOW && lastStopPin != stopPin) { // if the state has just changed
@@ -584,7 +581,7 @@ void loop()
       }
     }
     lastStopPin = stopPin;
-    #endif
+#endif
 
     // if the state has changed, set the flags and update the time of state change
     if (currentState != lastState) {
@@ -656,14 +653,14 @@ void loop()
           Setpoint = activeProfile.peakTemp - 15; // get it all going with a bit of a kick! v sluggish here otherwise, too hot too long
         }
 
-        #ifdef OPENDRAWER
+#ifdef OPENDRAWER
         if (!openedDrawer) {
           openedDrawer = true;
           digitalWrite(PIN_DRAWER, HIGH);
           delay(5);
           digitalWrite(PIN_DRAWER, LOW);
         }
-        #endif
+#endif
 
         Setpoint -= (activeProfile.rampDownRate / 10); 
 
@@ -782,7 +779,7 @@ void loadProfile(unsigned int targetProfile){
   lcd.print(profileNumber);
   saveLastUsedProfile();
 
-//#ifdef DEBUG
+#ifdef DEBUG
   Serial.println("Check parameters:");
   Serial.print("idleTemp ");
   Serial.println(idleTemp);
@@ -799,11 +796,11 @@ void loadProfile(unsigned int targetProfile){
   Serial.print("rampDownRate ");
   Serial.println(activeProfile.rampDownRate);
   Serial.println("About to load parameters");
-//#endif
+#endif
 
   loadParameters(profileNumber);
 
-//#ifdef DEBUG
+#ifdef DEBUG
   Serial.println("Check parameters:");
   Serial.print("idleTemp ");
   Serial.println(idleTemp);
@@ -820,7 +817,7 @@ void loadProfile(unsigned int targetProfile){
   Serial.print("rampDownRate ");
   Serial.println(activeProfile.rampDownRate);
   Serial.println("after loading parameters");
-//#endif
+#endif
 
   delay(500);
 }
