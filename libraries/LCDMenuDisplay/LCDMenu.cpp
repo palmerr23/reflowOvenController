@@ -22,7 +22,7 @@ void LCDMenu::init(MenuItem *initial, LiquidCrystal *lcd, boolean fourkey) {
 	LCD = lcd;
 
 #ifdef USE_CLICKENCODER
-	Encoder = new ClickEncoder(A1, A0, A2);
+	Encoder = new ClickEncoder(A1, A0, A2, 2);
 	Encoder->setAccelerationEnabled(false);
 #endif
 
@@ -41,10 +41,10 @@ void LCDMenu::poll() {
       update = true;
       bool editing = this->Editing != NULL;
 	  if (encMovement > 0) {
-	  	editing ? this->Editing->inc(this) : this->moveToNext();
+	  	editing ? this->Editing->inc(this, encMovement) : this->moveToNext();
 	  }
 	  else {
-	  	editing ? this->Editing->dec(this) : this->moveToPrev();
+	  	editing ? this->Editing->dec(this, encMovement * -1) : this->moveToPrev();
 	  }
     }
 
@@ -70,15 +70,10 @@ void LCDMenu::poll() {
     }
 
 	if (update) {
-		update = false;		
-		if (this->Editing == NULL) {
-			this->showCurrent();
-			Encoder->setAccelerationEnabled(false);
-		} 
-		else {
-			this->showCurrentValue();
-			Encoder->setAccelerationEnabled(true);
-		}
+		update = false;
+		bool editing = this->Editing != NULL;
+		editing ? this->showCurrentValue() : this->showCurrent();
+		Encoder->setAccelerationEnabled(editing);
 	}
 }
 #endif

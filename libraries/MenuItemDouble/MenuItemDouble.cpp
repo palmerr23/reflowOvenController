@@ -73,14 +73,14 @@ void MenuItemDouble::exit (MenuDisplay *controller) {
 	return;
 }
 
-void MenuItemDouble::inc (MenuDisplay *controller) {
-	CurrentValue += (double)0.1;
+void MenuItemDouble::inc (MenuDisplay *controller, int8_t amount) {
+	CurrentValue += (double)amount * 0.1;
 	if(CurrentValue > myMax)
 		CurrentValue = myMax;
 }
 
-void MenuItemDouble::dec (MenuDisplay *controller) {
-	CurrentValue -= (double)0.1;
+void MenuItemDouble::dec (MenuDisplay *controller, int8_t amount) {
+	CurrentValue -= (double)amount * 0.1;
 	if(CurrentValue < myMin)
 		(CurrentValue = myMin);
 }

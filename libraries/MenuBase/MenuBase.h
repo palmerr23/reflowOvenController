@@ -12,6 +12,8 @@
 
 #include "Arduino.h"
 
+#define clampValue(val, lo, hi) if (val > hi) val = hi; if (val < lo) val = lo;
+
 class MenuDisplay;
 
 class MenuItem {
@@ -29,8 +31,8 @@ public:
   virtual void getValueString (char *string) = 0;
   virtual void select(MenuDisplay *controller) = 0;
   virtual void exit(MenuDisplay *controller) = 0;
-  virtual void inc(MenuDisplay *controller) = 0;
-  virtual void dec(MenuDisplay *controller) = 0;
+  virtual void inc(MenuDisplay *controller, int8_t amount = 1) = 0;
+  virtual void dec(MenuDisplay *controller, int8_t amount = 1) = 0;
   void addItem(MenuItem *newItem);
 };
 

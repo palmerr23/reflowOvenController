@@ -59,7 +59,7 @@ void MenuItemSelect::exit (MenuDisplay *controller) {
 		}
 	}}
 
-void MenuItemSelect::inc (MenuDisplay *controller) {
+void MenuItemSelect::inc (MenuDisplay *controller, int8_t amount) {
 	if (this->CurrentOption->Next != NULL) {
 		this->CurrentOption = this->CurrentOption->Next;
 	} else {
@@ -67,6 +67,6 @@ void MenuItemSelect::inc (MenuDisplay *controller) {
 	}
 }
 
-void MenuItemSelect::dec (MenuDisplay *controller) {
+void MenuItemSelect::dec (MenuDisplay *controller, int8_t amount) {
 	//this->CurrentValue--;
 }

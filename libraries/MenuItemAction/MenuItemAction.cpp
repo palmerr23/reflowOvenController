@@ -49,11 +49,11 @@ void MenuItemAction::exit (MenuDisplay *controller) {
 		}
 	}}
 
-void MenuItemAction::inc(MenuDisplay *controller) {
+void MenuItemAction::inc(MenuDisplay *controller, int8_t amount) {
 	return;
 }
 
-void MenuItemAction::dec(MenuDisplay *controller) {
+void MenuItemAction::dec(MenuDisplay *controller, int8_t amount) {
 	return;
 }
 

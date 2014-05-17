@@ -457,15 +457,25 @@ void setup() {
 }
 
 #ifdef USE_CLICKENCODER
+volatile bool doPoll = false;
+
 void timerIsr() {
   if (currentState == idle) {
     myMenu.Encoder->service();
+    doPoll = true;
   }
 }
 #endif
 
 void loop()
 {
+#ifdef USE_CLICKENCODER
+  if (doPoll) {
+    doPoll = false;
+    myMenu.poll();
+  }
+#endif
+
   if (millis() - lastUpdate >= 100) {
 #ifdef DEBUG
     Serial.print("freeMemory()=");
@@ -514,7 +524,9 @@ void loop()
     //Serial.println(readings[index]);
 
     if (currentState == idle) {
+#ifndef USE_CLICKENCODER
       myMenu.poll();
+#endif
     }
     else {
       if (millis() - lastDisplayUpdate > 250) { // 4hz display during reflow cycle

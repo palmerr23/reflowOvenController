@@ -66,20 +66,12 @@ void MenuItemIntegerAction::exit (MenuDisplay *controller) {
 	}
 }
 
-void MenuItemIntegerAction::inc (MenuDisplay *controller) {
-	CurrentValue++;
-	if(rollOver){
-		if(CurrentValue > myMax) CurrentValue = myMin;
-	} else {
-		if(CurrentValue > myMax) CurrentValue = myMax;
-	}
+void MenuItemIntegerAction::inc (MenuDisplay *controller, int8_t amount) {
+	CurrentValue += amount;
+	if (rollOver) clampValue(CurrentValue, myMin, myMax);
 }
 
-void MenuItemIntegerAction::dec (MenuDisplay *controller) {
-	CurrentValue--;
-	if(rollOver){
-		if(CurrentValue < myMin) CurrentValue = myMax;
-	} else {
-		if(CurrentValue < myMin) CurrentValue = myMin;
-	}
+void MenuItemIntegerAction::dec (MenuDisplay *controller, int8_t amount) {
+	CurrentValue -= amount;
+	if (rollOver) clampValue(CurrentValue, myMin, myMax);
 }

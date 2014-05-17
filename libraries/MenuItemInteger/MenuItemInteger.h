@@ -22,8 +22,8 @@ public:
 	void getValueString (char *);
 	void select(MenuDisplay *controller);
 	void exit(MenuDisplay *controller);
-	void inc(MenuDisplay *controller);
-	void dec(MenuDisplay *controller);
+	void inc(MenuDisplay *controller, int8_t amount = 1);
+	void dec(MenuDisplay *controller, int8_t amount = 1);
 
 private:
 	int *TargetInteger;

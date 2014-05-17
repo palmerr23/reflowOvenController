@@ -48,11 +48,11 @@ void MenuItemSubMenu::exit (MenuDisplay *controller) {
 	}
 }
 
-void MenuItemSubMenu::inc(MenuDisplay *controller) {
+void MenuItemSubMenu::inc(MenuDisplay *controller, int8_t amount) {
 	return;
 }
 
-void MenuItemSubMenu::dec(MenuDisplay *controller) {
+void MenuItemSubMenu::dec(MenuDisplay *controller, int8_t amount) {
 	return;
 }
 
