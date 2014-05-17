@@ -26,7 +26,7 @@
 #endif
 
 // bump minor version number on small changes, major on large changes, eg when eeprom layout changes
-const char * ver = "2.6";
+const char * ver = "2.7-pit";
 
 //#define DEBUG
 #define BOARD_PIT_TEST_LEONARDO 1
