@@ -1,0 +1,4 @@
+[submodule "libraries/ClickEncoder"]
+	path = libraries/ClickEncoder
+	url = git@github.com:0xPIT/encoder.git
+	branch = arduino

@@ -7,6 +7,12 @@ Copyright Ed Simmons 2013 - ESTechnical
 ed@estechnical.co.uk
 http://www.estechnical.co.uk
 
+Important
+====================
+
+After cloning this repository, you need to do 
+    git submodule update --init
+to fetch all involved libraries.
 
 Introduction
 ====================
