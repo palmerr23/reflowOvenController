@@ -11,7 +11,9 @@ Important
 ====================
 
 After cloning this repository, you need to do 
+
     git submodule update --init
+
 to fetch all involved libraries.
 
 Introduction
