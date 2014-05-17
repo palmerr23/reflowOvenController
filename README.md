@@ -1,11 +1,19 @@
 reflowOvenController
 ====================
 
-ESTechnical Reflow Oven Controller source code
+**Reflow Oven Controller with PID Control **
 
-Copyright Ed Simmons 2013 - ESTechnical
-ed@estechnical.co.uk
-http://www.estechnical.co.uk
+* (c) 2013 Ed Simmons <ed@estechnical.co.uk>
+* (c) 2014 Karl Pitrich <karl@pitrich.com>
+
+Suitable for the controler hardware sold by [ESTechnical] or for DIY controllers based on Arduino hardware.
+
+
+Changes
+====================
+* 2014-05-17: Support for click encoder
+  * The `#define USE_CLICKENCODER 1` in LCDMenu.h selects the use of a rotary encoder with button instead of the buttons in the T962x oven.
+  * Configure the Pins used in `LCDMenu.cpp`
 
 Important
 ====================
@@ -15,6 +23,7 @@ After cloning this repository, you need to do
     git submodule update --init
 
 to fetch all involved libraries. (See: [Submodule Cheat Sheet])
+
 
 
 Introduction
@@ -40,11 +49,7 @@ If you are familiar with git and want to use git to check out the source code, u
 (This will check out the source code from git into the current directory. I will cover no further use of git here.)
 
 	git clone https://github.com/estechnical/reflowOvenController.git
-
-
-Downloading a zip file:
-	To download a zip file of the latest source code, visit https://github.com/estechnical/reflowOvenController and click on the
-	'Download ZIP' button (in the right hand column of the page). Once the file has dowloaded, extract the zip archive to a location of your choice.
+    git submodule update --init
 
 
 Installation
@@ -52,10 +57,11 @@ Installation
 
 To edit/compile the source code for the reflow controller, first install the arduino IDE - http://arduino.cc/en/Main/Software
 
-Because the ESTechnical reflow controller uses a 20MHz crystal instead of a 16MHz crystal, this requires special build settings for the arduino IDE. 
+**Note:** Tested with Arduino 1.5.x only.
+
+If you use the ESTechnical reflow controller which uses a 20MHz crystal instead of a 16MHz crystal,  special build settings for the arduino IDE are required.
 
 Browse to your arduino installation directory, then browse to hardware/arduino/boards.txt. Edit this file (using, for example Programmer's Notepad http://www.pnotepad.org) and add the following block to the top of the file, taking care to not mess up the layout of the file:
-
 
 	##############################################################
 
@@ -81,7 +87,6 @@ Browse to your arduino installation directory, then browse to hardware/arduino/b
 
 	##############################################################
 
-
 Save the file and quit.
 
 Setting up the source code to build firmware
@@ -104,3 +109,5 @@ Compile the firmware with Ctrl+R to test everything is installed correctly. Choo
 
 
 [Submodule Cheat Sheet]:http://blog.jacius.info/git-submodule-cheat-sheet/
+[ESTechnical]:http://www.estechnical.co.uk
+
