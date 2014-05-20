@@ -27,6 +27,7 @@ const char * ver = "2.7-pit";
 
 //#define DEBUG
 #define BOARD_PIT_TEST_LEONARDO 1
+#define BOARD_PIT_REFLOWCTRL 1
 
 // ----------------------------------------------------------------------------
 // Hardware Configuration 
@@ -70,28 +71,29 @@ const char * ver = "2.7-pit";
 # define LCD_CHARS   20
 # define LCD_LINES    4
 
-#define PIN_JUMPER   -1  // open for T962(A/C) use, closed for toaster conversion kit keypad
-#define USE_ENCODER   1
-#define BUTTON_STOP   1
+# define PIN_JUMPER   -1  // open for T962(A/C) use, closed for toaster conversion kit keypad
+# define USE_ENCODER   1
+# define BUTTON_STOP   1
 
-#define PIN_FAN      1
-#define PIN_HEATER   2
-#define PIN_DRAWER  -1 // pin to open the drawer automatically at the beginning of ramp down
+# define PIN_FAN      1
+# define PIN_HEATER   2
+# define PIN_DRAWER  -1 // pin to open the drawer automatically at the beginning of ramp down
 
-#define THERMOCOUPLE1_CS  3
-#define THERMOCOUPLE2_CS  3
+# define THERMOCOUPLE1_CS  3
+# define THERMOCOUPLE2_CS  3
 #endif
 
-#define BOARD_PIT_REFLOWCTRL_10
-# define TODO 1
+#ifdef BOARD_PIT_REFLOWCTRL
+# define PIN_INT_ZX 0 // interrupt pin for zero crossing detector
+                      // Int 0 = Pin 2, Int 1 = Pin 3
 #endif
 
 // ----------------------------------------------------------------------------
 // wave packet control: only turn the solid state relais on for a percentage 
 // of complete sinusoids (1x 360°) only
-//
 // think of this as a PWM for single sinusoid
 //
+
 typedef struct Channel_s {
   volatile uint8_t target; // percentage of on-time
   uint8_t state;           // current state counter
@@ -108,7 +110,7 @@ Channel_t Channels[CHANNELS] = {
 // Zero Crossing ISR
 // per ZX, process one channel only
 
-void __attribute__((naked)) zeroCrossingInterrupt(void) {
+void __attribute__((naked)) zeroCrossingIsr(void) {
   static uint8_t ch = 0;
 
   if (Channels[ch].tick++ % 2) { // full wave = every 2nd zero crossing
@@ -125,13 +127,7 @@ void __attribute__((naked)) zeroCrossingInterrupt(void) {
   ch = ((ch + 1) % CHANNELS); // next channel Alternative: sizeof(Channels) / sizeof(Channel_t)
 }
 
-// Int 0 = Pin 2
-// attachInterrupt(0, callback, RISING);
-// Int 1 = Pin 3
-
-
-// -----------------------
-
+// ----------------------------------------------------------------------------
 
 #include "temperature.h"
 
@@ -157,6 +153,7 @@ int fanAssistSpeed = 50; // default fan speed
 # include <MemoryFree.h>
 #endif
 
+// EEPROM offsets
 const unsigned int offsetFanSpeed_   = 30 * 16 + 1; // one byte
 const unsigned int offsetProfileNum_ = 30 * 16 + 2; // one byte
 
@@ -253,7 +250,22 @@ enum state {
 state currentState = idle, lastState = idle;
 boolean stateChanged = false;
 
-void abortWithError(int error) {
+// ----------------------------------------------------------------------------
+
+#ifdef USE_CLICKENCODER
+volatile bool doPoll = false;
+
+void __attribute__((naked)) timerIsr(void) {
+  if (currentState == idle) {
+    myMenu.Encoder->service();
+    doPoll = true;
+  }
+}
+#endif
+
+// ----------------------------------------------------------------------------
+
+void __attribute__((naked)) abortWithError(int error) {
   // set outputs off for safety.
   digitalWrite(PIN_FAN, LOW);
   digitalWrite(PIN_HEATER, LOW);
@@ -290,6 +302,8 @@ void abortWithError(int error) {
     ;
   }
 }
+
+// ----------------------------------------------------------------------------
 
 void displayThermocoupleData(struct tcInput* input) {
   switch (input->stat) {
@@ -370,7 +384,7 @@ boolean getJumperState() {
   return result;
 }
 
-void setup() {
+void __attribute__((naked)) setup() {
   Serial.begin(57600);
   Serial.print("Starting...");
 
@@ -477,7 +491,7 @@ void setup() {
 
   PID.SetOutputLimits(0, WindowSize);
 
-  //turn the PID on
+  // turn the PID on
   PID.SetMode(AUTOMATIC);
 
   readThermocouple(&A);
@@ -507,20 +521,14 @@ void setup() {
   Timer1.initialize(1000);
   Timer1.attachInterrupt(timerIsr);
 #endif
-}
 
-#ifdef USE_CLICKENCODER
-volatile bool doPoll = false;
-
-void timerIsr() {
-  if (currentState == idle) {
-    myMenu.Encoder->service();
-    doPoll = true;
-  }
-}
+#if PIN_INT_ZX >= 0
+  attachInterrupt(PIN_INT_ZX, zeroCrossingIsr, RISING);
 #endif
+}
 
-void loop()
+
+void __attribute__((naked)) loop(void)
 {
 #ifdef USE_CLICKENCODER
   if (doPoll) {
@@ -544,9 +552,7 @@ void loop()
       abortWithError(3);
     }
 
-/* 
-// i points to the oldest sample in the list
-
+/*
 int samples[8];
 
 total -= samples[i];
