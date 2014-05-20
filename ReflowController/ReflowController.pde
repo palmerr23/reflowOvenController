@@ -82,7 +82,56 @@ const char * ver = "2.7-pit";
 #define THERMOCOUPLE2_CS  3
 #endif
 
+#define BOARD_PIT_REFLOWCTRL_10
+# define TODO 1
+#endif
+
 // ----------------------------------------------------------------------------
+// wave packet control: only turn the solid state relais on for a percentage 
+// of complete sinusoids (1x 360°) only
+//
+// think of this as a PWM for single sinusoid
+//
+typedef struct Channel_s {
+  volatile uint8_t target; // percentage of on-time
+  uint8_t state;           // current state counter
+  uint8_t tick;            // zerocrossing counter (2 per full wave)
+  uint8_t pin;             // io pin of solid state relais
+} Channel_t;
+
+#define CHANNELS 2
+Channel_t Channels[CHANNELS] = {
+  { 30, 0, 0, 2 },
+  { 90, 0, 0, 3 }
+};
+
+// Zero Crossing ISR
+// per ZX, process one channel only
+
+void __attribute__((naked)) zeroCrossingInterrupt(void) {
+  static uint8_t ch = 0;
+
+  if (Channels[ch].tick++ % 2) { // full wave = every 2nd zero crossing
+    Channels[ch].state += Channels[ch].target;
+    if (Channels[ch].state >= 100) {
+      digitalWrite(Channels[ch].pin, HIGH);
+      Channels[ch].state -= 100;
+    }
+    else {
+      digitalWrite(Channels[ch].pin, LOW);
+    }
+  }
+
+  ch = ((ch + 1) % CHANNELS); // next channel Alternative: sizeof(Channels) / sizeof(Channel_t)
+}
+
+// Int 0 = Pin 2
+// attachInterrupt(0, callback, RISING);
+// Int 1 = Pin 3
+
+
+// -----------------------
+
 
 #include "temperature.h"
 
@@ -152,33 +201,39 @@ unsigned long windowStartTime;
 unsigned long startTime, stateChangedTime = 0, lastUpdate = 0, lastDisplayUpdate = 0, lastSerialOutput = 0; // a handful of timer variables
 
 // Define the PID tuning parameters
+// TODO: make these configurable
 double Kp = 4, Ki = 0.05, Kd = 2;
 double fanKp = 1, fanKi = 0.03, fanKd = 10;
 
-//Specify the links and initial tuning parameters
+// specify the links and initial tuning parameters
 PID PID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
 unsigned int fanValue, heaterValue;
 
-//bits for keeping track of the temperature ramp
+// bits for keeping track of the temperature ramp
 #define NUMREADINGS 10
+
+// TODO: refactor to use integers
+
 double airTemp[NUMREADINGS];
 double runningTotalRampRate; 
 double rampRate = 0;
 
-double rateOfRise = 0; // the result that is displayed
+double rateOfRise = 0;          // the result that is displayed
 
-double readingsT1[NUMREADINGS];                // the readings used to make a stable temp rolling average
-double readingsT2[NUMREADINGS];
-unsigned short index = 0;                      // the index of the current reading
-double totalT1 = 0;                            // the running total
+double readingsT1[NUMREADINGS]; // the readings used to make a stable temp rolling average
+double readingsT2[NUMREADINGS]; 
+unsigned short index = 0;       // the index of the current reading
+double totalT1 = 0;             // the running total
 double totalT2 = 0;
-double averageT1 = 0;                          // the average
+double averageT1 = 0;           // the average
 double averageT2 = 0;
 
-boolean lastStopPin = true; // this is a flag used to store the state of the stop key pin on the last cycle through the main loop
-// if the stop key state changes, we perform an action, not EVERY time we find the key is down... this is to prevent multiple
+// this is a flag used to store the state of the stop key pin on the last cycle 
+// through the main loop if the stop key state changes, we perform an action, 
+// not EVERY time we find the key is down... this is to prevent multiple
 // triggers from a single keypress
+boolean lastStopPin = true; 
 
 #ifdef OPENDRAWER
 boolean openedDrawer = false;
@@ -308,10 +363,10 @@ void updateDisplay(){
 
 boolean getJumperState() {
   boolean result = false; // jumper open
-  if (PIN_JUMPER > 0) {
-    unsigned int val = analogRead(PIN_JUMPER);
-    if (val < 500) result = true;
-  }
+#if PIN_JUMPER > 0
+  unsigned int val = analogRead(PIN_JUMPER);
+  if (val < 500) result = true;
+#endif
   return result;
 }
 
@@ -431,6 +486,7 @@ void setup() {
     abortWithError(3);
   }
 
+  // initialize moving average filter
   runningTotalRampRate = A.temperature * NUMREADINGS;
   for(int i = 0; i < NUMREADINGS; i++) {
     airTemp[i] = A.temperature; 
@@ -488,7 +544,20 @@ void loop()
       abortWithError(3);
     }
 
-    // keep a rolling average of the temp
+/* 
+// i points to the oldest sample in the list
+
+int samples[8];
+
+total -= samples[i];
+samples[i] = A.temperature;
+total += samples[i];
+
+i = (i + 1) % 8; // next position
+average = total >> 3;
+*/
+
+    // rolling average of the temp T1 and T2
     totalT1 -= readingsT1[index]; // subtract the last reading
     totalT2 -= readingsT2[index];
 
@@ -497,14 +566,13 @@ void loop()
 
     totalT1 += readingsT1[index]; // add the reading to the total
     totalT2 += readingsT2[index]; 
-    index++; // advance to the next index
+    
+    index = (index + 1) % 8; // next position
 
-    if (index >= NUMREADINGS) { // if we're at the end of the array...
-      index = 0;                // ...wrap around to the beginning
-    }
-
-    averageT1 = totalT1 / NUMREADINGS;    // calculate the average temp
+    // TEST: averageT1 = totalT1 >> 3;
+    averageT1 = totalT1 / NUMREADINGS;  // calculate the average temp
     averageT2 = totalT2 / NUMREADINGS;
+
 
     // need to keep track of a few past readings in order to work out rate of rise
     for (int i = 1; i < NUMREADINGS; i++) { // iterate over all previous entries, moving them backwards one index
@@ -513,12 +581,11 @@ void loop()
 
     airTemp[NUMREADINGS - 1] = averageT1; // update the last index with the newest average
 
+    // calculate rate of rise in degrees per polling cycle time/ num readings
     rampRate = (airTemp[NUMREADINGS - 1] - airTemp[0]); // subtract earliest reading from the current one
-    // this gives us the rate of rise in degrees per polling cycle time/ num readings
 
     Input = airTemp[NUMREADINGS - 1]; // update the variable the PID reads
-    //Serial.print("Temp1= ");
-    //Serial.println(readings[index]);
+
 
     if (currentState == idle) {
 #ifndef USE_CLICKENCODER
@@ -532,7 +599,8 @@ void loop()
       }
     }
 
-    if (0 && millis() - lastSerialOutput > 250) {
+#if 0 // !NO_SERIAL || WITH_SERIAL
+    if (millis() - lastSerialOutput > 250) {
       lastSerialOutput = millis();
 
       if (currentState == idle) {
@@ -545,10 +613,10 @@ void loop()
         else {
           Serial.print("999"); 
         }
-#ifdef DEBUG
+      #ifdef DEBUG
         Serial.print(",");
         Serial.print(freeMemory());
-#endif
+      #endif
         Serial.println();
       } 
       else {
@@ -570,13 +638,14 @@ void loop()
         else {
           Serial.print("999"); 
         }
-#ifdef DEBUG
+      #ifdef DEBUG
         Serial.print(",");
         Serial.print(freeMemory());
-#endif
+      #endif
         Serial.println();
       }
     }
+#endif
 
 #if BUTTON_STOP > 0
     // check for the stop or back key being pressed
@@ -612,7 +681,8 @@ void loop()
           PID.SetTunings(Kp, Ki, Kd);
           Setpoint = airTemp[NUMREADINGS - 1];
           stateChanged = false;
-        }    
+        }
+
         Setpoint += (activeProfile.rampUpRate / 10); // target set ramp up rate
 
         if (Setpoint >= activeProfile.soakTemp - 1) {
@@ -625,6 +695,7 @@ void loop()
           Setpoint = activeProfile.soakTemp;
           stateChanged = false;
         }
+
         if (millis() - stateChangedTime >= (unsigned long)activeProfile.soakDuration * 1000) {
           currentState = rampUp;
         }
@@ -701,6 +772,7 @@ void loop()
 #ifndef OPENDRAWER
   if (Setpoint > Input + 50) abortWithError(1);// if we're 50 degree cooler than setpoint, abort
 #endif
+
   //if(Input > Setpoint + 50) abortWithError(2);// or 50 degrees hotter, also abort
 
   PID.Compute();
