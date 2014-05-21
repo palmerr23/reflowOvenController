@@ -8,32 +8,16 @@
 #include <PID_v1.h>
 #include <LiquidCrystal.h>
 
-#include <MenuBase.h>
-#include <LCDMenu.h>
-#include <MenuItemSubMenu.h>
-#include <MenuItemSelect.h>
-#include <MenuItemInteger.h>
-#include <MenuItemDouble.h>
-#include <MenuItemAction.h>
-#include <MenuItemIntegerAction.h>
-
-#ifdef USE_CLICKENCODER
-#include <ClickEncoder.h>
-#include <TimerOne.h>
-#endif
-
-// bump minor version number on small changes, major on large changes, eg when eeprom layout changes
-const char * ver = "2.7-pit";
-
 //#define DEBUG
 #define BOARD_PIT_TEST_LEONARDO 1
-#define BOARD_PIT_REFLOWCTRL 1
+//#define BOARD_PIT_REFLOWCTRL 1
+//#define BOARD_ESTECH_Vx 1
 
 // ----------------------------------------------------------------------------
 // Hardware Configuration 
 // ----------------------------------------------------------------------------
 
-// TODO use Arduino's SPI.h
+// TODO use Arduino SPI.h
 // SPI Bus
 #define DATAOUT     11 // MOSI
 #define SPICLOCK    13 // SCK
@@ -71,11 +55,11 @@ const char * ver = "2.7-pit";
 # define LCD_CHARS   20
 # define LCD_LINES    4
 
-# define PIN_JUMPER   -1  // open for T962(A/C) use, closed for toaster conversion kit keypad
-# define USE_ENCODER   1
-# define BUTTON_STOP   1
+# define PIN_JUMPER       -1 // open for T962(A/C) use, closed for toaster conversion kit keypad
+# define USE_CLICKENCODER  1
+# define BUTTON_STOP       1
 
-# define PIN_FAN      1
+# define PIN_FAN      2
 # define PIN_HEATER   2
 # define PIN_DRAWER  -1 // pin to open the drawer automatically at the beginning of ramp down
 
@@ -84,9 +68,57 @@ const char * ver = "2.7-pit";
 #endif
 
 #ifdef BOARD_PIT_REFLOWCTRL
+# define LCD_RW      -1
+# define LCD_RS       5
+# define LCD_EN       6
+# define LCD_D4       7
+# define LCD_D5       8
+# define LCD_D6       9
+# define LCD_D7      10
+# define LCD_CHARS   20
+# define LCD_LINES    4
+
+# define THERMOCOUPLE1_CS  3
+# define THERMOCOUPLE2_CS  4
+
+# define USE_CLICKENCODER   1
+# define BUTTON_STOP       -1
+
+# define PIN_HEATER   0
+# define PIN_FAN      1
+# define PIN_DRAWER  -1 // pin to open the drawer automatically at the beginning of ramp down
+# define PIN_JUMPER  -1  // open for T962(A/C) use, closed for toaster conversion kit keypad
+
 # define PIN_INT_ZX 0 // interrupt pin for zero crossing detector
-                      // Int 0 = Pin 2, Int 1 = Pin 3
+                      // int0 = Pin 2, int1 = Pin 3
 #endif
+
+// ----------------------------------------------------------------------------
+
+#ifndef PIN_INT_ZX
+# define PIN_INT_ZX -1
+#endif
+
+// ----------------------------------------------------------------------------
+
+#include <MenuBase.h>
+#include <LCDMenu.h>
+#include <MenuItemSubMenu.h>
+#include <MenuItemSelect.h>
+#include <MenuItemInteger.h>
+#include <MenuItemDouble.h>
+#include <MenuItemAction.h>
+#include <MenuItemIntegerAction.h>
+
+#ifdef USE_CLICKENCODER // defined in LCDMenu.h
+#include <ClickEncoder.h>
+#include <TimerOne.h>
+#endif
+
+// ----------------------------------------------------------------------------
+
+// bump minor version number on small changes, major on large changes, eg when eeprom layout changes
+const char * ver = "2.7-pit";
 
 // ----------------------------------------------------------------------------
 // wave packet control: only turn the solid state relais on for a percentage 
@@ -94,37 +126,50 @@ const char * ver = "2.7-pit";
 // think of this as a PWM for single sinusoid
 //
 
+// Serial Port: Pins 0 and 1
+
 typedef struct Channel_s {
   volatile uint8_t target; // percentage of on-time
   uint8_t state;           // current state counter
   uint8_t tick;            // zerocrossing counter (2 per full wave)
   uint8_t pin;             // io pin of solid state relais
+  uint8_t port;
 } Channel_t;
 
 #define CHANNELS 2
 Channel_t Channels[CHANNELS] = {
-  { 30, 0, 0, 2 },
-  { 90, 0, 0, 3 }
+  { 30, 0, 0, 
+    2, PORTD }, // PD2 == RX == Arduino Pin 0
+  { 90, 0, 0, 
+    3, PORTD }  // PD3 == TX == Arduino Pin 1
 };
 
-// Zero Crossing ISR
-// per ZX, process one channel only
+// Ensure that Solid State Relais are off when starting
+//
+// TEST if it works without forward declaration
+//void setupRelayPins(void) __attribute__((constructor, naked));
+void __attribute__((constructor, naked)) setupRelayPins(void) {
+  DDRD  |= (1 << 2) | (1 << 3); // output
+  PORTD |= (1 << 2) | (1 << 3); // high
+}
 
-void __attribute__((naked)) zeroCrossingIsr(void) {
+// Zero Crossing ISR; per ZX, process one channel only
+// NB: use native port IO instead of digitalWrite b/c performance
+void zeroCrossingIsr(void) {
   static uint8_t ch = 0;
 
   if (Channels[ch].tick++ % 2) { // full wave = every 2nd zero crossing
     Channels[ch].state += Channels[ch].target;
     if (Channels[ch].state >= 100) {
-      digitalWrite(Channels[ch].pin, HIGH);
+      Channels[ch].port &= ~(1 << Channels[ch].pin);
       Channels[ch].state -= 100;
     }
     else {
-      digitalWrite(Channels[ch].pin, LOW);
+      Channels[ch].port |= (1 << Channels[ch].pin);
     }
   }
 
-  ch = ((ch + 1) % CHANNELS); // next channel Alternative: sizeof(Channels) / sizeof(Channel_t)
+  ch = ((ch + 1) % CHANNELS); // next channel
 }
 
 // ----------------------------------------------------------------------------
@@ -162,7 +207,13 @@ boolean thermocoupleOneActive = true; // this is used to keep track of which the
 
 byte clr;
 
-LiquidCrystal lcd(LCD_RS, LCD_RW, LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7);
+LiquidCrystal lcd(LCD_RS, 
+#if LCD_RW >= 0 // RW is not necessary if lcd is on dedicated pins
+  LCD_RW,
+#endif
+  LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7
+);
+
 
 LCDMenu myMenu;
 
@@ -255,7 +306,7 @@ boolean stateChanged = false;
 #ifdef USE_CLICKENCODER
 volatile bool doPoll = false;
 
-void __attribute__((naked)) timerIsr(void) {
+void timerIsr(void) {
   if (currentState == idle) {
     myMenu.Encoder->service();
     doPoll = true;
@@ -265,7 +316,7 @@ void __attribute__((naked)) timerIsr(void) {
 
 // ----------------------------------------------------------------------------
 
-void __attribute__((naked)) abortWithError(int error) {
+void abortWithError(int error) {
   // set outputs off for safety.
   digitalWrite(PIN_FAN, LOW);
   digitalWrite(PIN_HEATER, LOW);
@@ -384,7 +435,7 @@ boolean getJumperState() {
   return result;
 }
 
-void __attribute__((naked)) setup() {
+void setup() {
   Serial.begin(57600);
   Serial.print("Starting...");
 
@@ -527,8 +578,7 @@ void __attribute__((naked)) setup() {
 #endif
 }
 
-
-void __attribute__((naked)) loop(void)
+void loop(void)
 {
 #ifdef USE_CLICKENCODER
   if (doPoll) {

@@ -10,8 +10,6 @@
 #ifndef LCDMenu_h
 #define LCDMenu_h
 
-#define USE_CLICKENCODER 1
-
 #include <LiquidCrystal.h>
 #include "../MenuBase/MenuBase.h"
 
