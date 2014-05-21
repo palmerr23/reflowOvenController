@@ -16583,6 +16583,7 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <part name="GND10" library="supply1" deviceset="GND" device=""/>
 <part name="P+5" library="supply1" deviceset="VCC" device=""/>
 <part name="3V3" library="testpad" deviceset="TP" device="TP08R" value="TPTP08R"/>
+<part name="C9" library="rcl" deviceset="C-EU" device="025-025X050" value="100n"/>
 </parts>
 <sheets>
 <sheet>
@@ -16639,8 +16640,8 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <attribute name="NAME" x="127.7874" y="64.77" size="1.778" layer="95" rot="R90"/>
 <attribute name="VALUE" x="132.842" y="64.262" size="1.778" layer="96" rot="R90"/>
 </instance>
-<instance part="R5" gate="G$1" x="45.72" y="30.48" rot="R180"/>
-<instance part="R6" gate="G$1" x="45.72" y="22.86" rot="R180"/>
+<instance part="R5" gate="G$1" x="48.26" y="30.48" rot="R180"/>
+<instance part="R6" gate="G$1" x="48.26" y="22.86" rot="R180"/>
 <instance part="GND2" gate="1" x="17.78" y="17.78" smashed="yes"/>
 <instance part="P+2" gate="VCC" x="129.54" y="76.2"/>
 <instance part="P+3" gate="VCC" x="86.36" y="76.2"/>
@@ -16711,6 +16712,10 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <instance part="GND10" gate="1" x="325.12" y="5.08" smashed="yes"/>
 <instance part="P+5" gate="VCC" x="325.12" y="25.4"/>
 <instance part="3V3" gate="G$1" x="322.58" y="66.04"/>
+<instance part="C9" gate="G$1" x="40.64" y="27.94" smashed="yes">
+<attribute name="NAME" x="39.624" y="32.639" size="1.778" layer="95"/>
+<attribute name="VALUE" x="38.354" y="19.685" size="1.778" layer="96"/>
+</instance>
 </instances>
 <busses>
 </busses>
@@ -16927,7 +16932,7 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <junction x="124.46" y="35.56"/>
 <junction x="81.28" y="35.56"/>
 <pinref part="R5" gate="G$1" pin="1"/>
-<wire x1="50.8" y1="30.48" x2="58.42" y2="30.48" width="0.1524" layer="91"/>
+<wire x1="53.34" y1="30.48" x2="58.42" y2="30.48" width="0.1524" layer="91"/>
 <pinref part="AC" gate="-1" pin="1"/>
 <wire x1="58.42" y1="12.7" x2="58.42" y2="30.48" width="0.1524" layer="91"/>
 <junction x="58.42" y="30.48"/>
@@ -16983,7 +16988,7 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <wire x1="86.36" y1="12.7" x2="86.36" y2="15.24" width="0.1524" layer="91"/>
 <junction x="86.36" y="15.24"/>
 <pinref part="R6" gate="G$1" pin="1"/>
-<wire x1="50.8" y1="22.86" x2="63.5" y2="22.86" width="0.1524" layer="91"/>
+<wire x1="53.34" y1="22.86" x2="63.5" y2="22.86" width="0.1524" layer="91"/>
 <wire x1="63.5" y1="22.86" x2="63.5" y2="15.24" width="0.1524" layer="91"/>
 <pinref part="AC" gate="-2" pin="1"/>
 <wire x1="63.5" y1="12.7" x2="63.5" y2="15.24" width="0.1524" layer="91"/>
@@ -16995,6 +17000,9 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <pinref part="R5" gate="G$1" pin="2"/>
 <pinref part="OC1" gate="G$1" pin="A"/>
 <wire x1="38.1" y1="30.48" x2="40.64" y2="30.48" width="0.1524" layer="91"/>
+<pinref part="C9" gate="G$1" pin="1"/>
+<wire x1="40.64" y1="30.48" x2="43.18" y2="30.48" width="0.1524" layer="91"/>
+<junction x="40.64" y="30.48"/>
 </segment>
 </net>
 <net name="N$10" class="0">
@@ -17002,6 +17010,9 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <pinref part="R6" gate="G$1" pin="2"/>
 <pinref part="OC1" gate="G$1" pin="C"/>
 <wire x1="38.1" y1="22.86" x2="40.64" y2="22.86" width="0.1524" layer="91"/>
+<pinref part="C9" gate="G$1" pin="2"/>
+<wire x1="40.64" y1="22.86" x2="43.18" y2="22.86" width="0.1524" layer="91"/>
+<junction x="40.64" y="22.86"/>
 </segment>
 </net>
 <net name="ZEROX" class="0">
