@@ -1,105 +1,13 @@
-/*
- ESTechnical Reflow Oven Controller
- (c) 2012-2013 Ed Simmons
- (c) 2014 Karl Pitrich <karl@pitrich.com>
- */
+// ----------------------------------------------------------------------------
+// Reflow Oven Controller
+// (c) 2014 Karl Pitrich <karl@pitrich.com>
+// (c) 2012-2013 Ed Simmons
+// ----------------------------------------------------------------------------
 
+#include <avr/eeprom.h>
 #include <EEPROM.h>
 #include <PID_v1.h>
 #include <LiquidCrystal.h>
-
-//#define DEBUG
-#define BOARD_PIT_TEST_LEONARDO 1
-//#define BOARD_PIT_REFLOWCTRL 1
-//#define BOARD_ESTECH_Vx 1
-
-// ----------------------------------------------------------------------------
-// Hardware Configuration 
-// ----------------------------------------------------------------------------
-
-// TODO use Arduino SPI.h
-// SPI Bus
-#define DATAOUT     11 // MOSI
-#define SPICLOCK    13 // SCK
-
-#ifdef BOARD_ESTECH_Vx
-# define LCD_D4 17 
-# define LCD_D5 16
-# define LCD_D6 15
-# define LCD_D7 14
-# define LCD_RS 19
-# define LCD_EN 18
-# define LCD_CHARS 20
-# define LCD_LINES  4
-
-# define PIN_JUMPER 7  // open for T962(A/C) use, closed for toaster conversion kit keypad
-# define PIN_FAN    8
-# define PIN_HEATER 9
-# define PIN_DRAWER -1 // pin to open the drawer automatically at the beginning of ramp down
-
-# define BUTTON_STOP -1
-
-# define THERMOCOUPLE1_CS 10
-# define THERMOCOUPLE2_CS  2
-//#define OPENDRAWER // define to open drawer at cycle end
-#endif
-
-#ifdef BOARD_PIT_TEST_LEONARDO
-# define LCD_RS       8
-# define LCD_RW       9
-# define LCD_EN      10
-# define LCD_D4       4
-# define LCD_D5       5
-# define LCD_D6       6
-# define LCD_D7       7
-# define LCD_CHARS   20
-# define LCD_LINES    4
-
-# define PIN_JUMPER       -1 // open for T962(A/C) use, closed for toaster conversion kit keypad
-# define USE_CLICKENCODER  1
-# define BUTTON_STOP       1
-
-# define PIN_FAN      2
-# define PIN_HEATER   2
-# define PIN_DRAWER  -1 // pin to open the drawer automatically at the beginning of ramp down
-
-# define THERMOCOUPLE1_CS  3
-# define THERMOCOUPLE2_CS  3
-#endif
-
-#ifdef BOARD_PIT_REFLOWCTRL
-# define LCD_RW      -1
-# define LCD_RS       5
-# define LCD_EN       6
-# define LCD_D4       7
-# define LCD_D5       8
-# define LCD_D6       9
-# define LCD_D7      10
-# define LCD_CHARS   20
-# define LCD_LINES    4
-
-# define THERMOCOUPLE1_CS  3
-# define THERMOCOUPLE2_CS  4
-
-# define USE_CLICKENCODER   1
-# define BUTTON_STOP       -1
-
-# define PIN_HEATER   0
-# define PIN_FAN      1
-# define PIN_DRAWER  -1 // pin to open the drawer automatically at the beginning of ramp down
-# define PIN_JUMPER  -1  // open for T962(A/C) use, closed for toaster conversion kit keypad
-
-# define PIN_INT_ZX 0 // interrupt pin for zero crossing detector
-                      // int0 = Pin 2, int1 = Pin 3
-#endif
-
-// ----------------------------------------------------------------------------
-
-#ifndef PIN_INT_ZX
-# define PIN_INT_ZX -1
-#endif
-
-// ----------------------------------------------------------------------------
 
 #include <MenuBase.h>
 #include <LCDMenu.h>
@@ -109,103 +17,169 @@
 #include <MenuItemDouble.h>
 #include <MenuItemAction.h>
 #include <MenuItemIntegerAction.h>
-
-#ifdef USE_CLICKENCODER // defined in LCDMenu.h
-#include <ClickEncoder.h>
 #include <TimerOne.h>
-#endif
+#include <ClickEncoder.h>
+#include "lcdchars.h"
 
 // ----------------------------------------------------------------------------
 
-// bump minor version number on small changes, major on large changes, eg when eeprom layout changes
-const char * ver = "2.7-pit";
+uint8_t crc8(uint8_t *data, uint16_t number_of_bytes_in_data);
+
+// ----------------------------------------------------------------------------
+
+const char * ver = "3.0-pit";
+
+// ----------------------------------------------------------------------------
+// Hardware Configuration 
+
+// TODO use Arduino SPI.h
+// SPI Bus
+#define DATAOUT     14 // MOSI
+#define SPICLOCK    15 // SCK
+
+#define LCD_RW    -1
+#define LCD_RS     5
+#define LCD_EN     6
+#define LCD_D4     7
+#define LCD_D5     8
+#define LCD_D6     9
+#define LCD_D7    10
+#define LCD_CHARS 20
+#define LCD_LINES  4
+
+#define THERMOCOUPLE1_CS  3
+#define THERMOCOUPLE2_CS  4
+
+#define BUTTON_STOP      -1
+
+#define PIN_HEATER   0
+#define PIN_FAN      1
+
+#define PIN_ZX   2 // pin for zero crossing detector
+#define INT_ZX   1 // interrupt for zero crossing detector
+                   // Leonardo == Pro Micro:
+                   //   Pin: 3 2 0 1 7
+                   //   Int: 0 1 2 3 4 
+
+//#define WITH_SERIAL 1
+//#define DEBUG
+
+// ----------------------------------------------------------------------------
+
+volatile uint32_t timerTicks     = 0;
+volatile uint32_t zeroCrossTicks = 0;
+volatile uint8_t  phaseCounter   = 0;
+
+// ----------------------------------------------------------------------------
+// Ensure that Solid State Relais are off when starting
+//
+void setupRelayPins(void) {
+  DDRD  |= (1 << 2) | (1 << 3); // output
+  PORTD &= ~((1 << 2) | (1 << 3));
+}
+
+void killRelayPins(void) {
+  Timer1.stop();
+  detachInterrupt(INT_ZX);
+  PORTD |= (1 << 2) | (1 << 3);
+}
 
 // ----------------------------------------------------------------------------
 // wave packet control: only turn the solid state relais on for a percentage 
-// of complete sinusoids (1x 360°) only
+// of complete sinusoids (i.e. 1x 360°) only
 // think of this as a PWM for single sinusoid
-//
 
-// Serial Port: Pins 0 and 1
+#define CHANNELS       2
+#define CHANNEL_HEATER 0
+#define CHANNEL_FAN    1
 
 typedef struct Channel_s {
   volatile uint8_t target; // percentage of on-time
   uint8_t state;           // current state counter
-  uint8_t tick;            // zerocrossing counter (2 per full wave)
+  int32_t next;            // when the next change in output shall occur  
+  bool action;             // hi/lo active
   uint8_t pin;             // io pin of solid state relais
-  uint8_t port;
 } Channel_t;
 
-#define CHANNELS 2
 Channel_t Channels[CHANNELS] = {
-  { 30, 0, 0, 
-    2, PORTD }, // PD2 == RX == Arduino Pin 0
-  { 90, 0, 0, 
-    3, PORTD }  // PD3 == TX == Arduino Pin 1
+  // heater
+  { 0, 0, 0, false, 2 }, // PD2 == RX == Arduino Pin 0
+  // fan
+  { 0, 0, 0, false, 3 }  // PD3 == TX == Arduino Pin 1
 };
 
-// Ensure that Solid State Relais are off when starting
-//
-// TEST if it works without forward declaration
-//void setupRelayPins(void) __attribute__((constructor, naked));
-void __attribute__((constructor, naked)) setupRelayPins(void) {
-  DDRD  |= (1 << 2) | (1 << 3); // output
-  PORTD |= (1 << 2) | (1 << 3); // high
-}
+// timer to align activation with the actual zero crossing
+uint16_t zxLoopDelay = 0; // a value of 89 has been deduced empirically by aligning zero cross and SSR output
+
+// calibrate zero crossing: how many timerIsr happen within one zero crossing
+#define zxCalibrationLoops 25
+struct {
+  volatile uint8_t iterations;
+  volatile uint8_t measure[zxCalibrationLoops];
+} zxLoopCalibration = {
+  zxCalibrationLoops, {}
+};
 
 // Zero Crossing ISR; per ZX, process one channel only
-// NB: use native port IO instead of digitalWrite b/c performance
+// NB: use native port IO instead of digitalWrite for better performance
 void zeroCrossingIsr(void) {
   static uint8_t ch = 0;
 
-  if (Channels[ch].tick++ % 2) { // full wave = every 2nd zero crossing
-    Channels[ch].state += Channels[ch].target;
-    if (Channels[ch].state >= 100) {
-      Channels[ch].port &= ~(1 << Channels[ch].pin);
-      Channels[ch].state -= 100;
-    }
-    else {
-      Channels[ch].port |= (1 << Channels[ch].pin);
-    }
+  // reset phase control timer
+  phaseCounter = 0;
+  TCNT1 = 0;
+
+  zeroCrossTicks++;
+
+  // calculate wave packet parameters
+  Channels[ch].state += Channels[ch].target;
+  if (Channels[ch].state >= 100) {
+    Channels[ch].state -= 100;
+    Channels[ch].action = false;
   }
+  else {
+    Channels[ch].action = true;
+  }
+  Channels[ch].next = timerTicks + zxLoopDelay;
 
   ch = ((ch + 1) % CHANNELS); // next channel
+
+  if (zxLoopCalibration.iterations) {
+    zxLoopCalibration.iterations--;
+  }
 }
 
 // ----------------------------------------------------------------------------
 
 #include "temperature.h"
 
-tcInput A, B; // the two structs for thermocouple data
-
 // data type for the values used in the reflow profile
 typedef struct profileValues_s {
-  int soakTemp;
-  int soakDuration;
-  int peakTemp;
-  int peakDuration;
-  double rampUpRate;
-  double rampDownRate;
-} profileValues_t;
+  int16_t soakTemp;
+  int16_t soakDuration;
+  int16_t peakTemp;
+  int16_t peakDuration;
+  double  rampUpRate;
+  double  rampDownRate;
+  uint8_t checksum;
+} Profile_t;
 
-profileValues_t activeProfile; // the one and only instance
+Profile_t activeProfile; // the one and only instance
 
 int idleTemp = 50; // the temperature at which to consider the oven safe to leave to cool naturally
-int fanAssistSpeed = 50; // default fan speed
-
-// do not edit below here unless you know what you are doing!
-#ifdef DEBUG
-# include <MemoryFree.h>
-#endif
+int fanAssistSpeed = 20; // default fan speed
 
 // EEPROM offsets
-const unsigned int offsetFanSpeed_   = 30 * 16 + 1; // one byte
-const unsigned int offsetProfileNum_ = 30 * 16 + 2; // one byte
+const uint16_t offsetFanSpeed   = 30 * sizeof(Profile_t) + 1; // one byte
+const uint16_t offsetProfileNum = 30 * sizeof(Profile_t) + 2; // one byte
 
 int profileNumber = 0;
 boolean thermocoupleOneActive = true; // this is used to keep track of which thermocouple input is used for control
 
-byte clr;
+tcInput A, B; // the two structs for thermocouple data
+
+// ----------------------------------------------------------------------------
+// UI
 
 LiquidCrystal lcd(LCD_RS, 
 #if LCD_RW >= 0 // RW is not necessary if lcd is on dedicated pins
@@ -213,7 +187,6 @@ LiquidCrystal lcd(LCD_RS,
 #endif
   LCD_EN, LCD_D4, LCD_D5, LCD_D6, LCD_D7
 );
-
 
 LCDMenu myMenu;
 
@@ -240,54 +213,78 @@ MenuItemSubMenu fan_control;
 
 MenuItemAction factory_reset;
 
-// Define Variables we'll be connecting to
-double Setpoint, Input, Output;
+// ----------------------------------------------------------------------------
 
-unsigned int WindowSize = 100;
-unsigned long windowStartTime;
+uint32_t startZeroCrossTicks;
+uint32_t stateChangedTicks = 0;
+uint32_t lastUpdate = 0;
+uint32_t lastDisplayUpdate = 0;
+uint32_t lastSerialOutput = 0;
 
-unsigned long startTime, stateChangedTime = 0, lastUpdate = 0, lastDisplayUpdate = 0, lastSerialOutput = 0; // a handful of timer variables
+// ----------------------------------------------------------------------------
+
+double Setpoint;
+double Input;
+double Output;
 
 // Define the PID tuning parameters
 // TODO: make these configurable
-double Kp = 4, Ki = 0.05, Kd = 2;
-double fanKp = 1, fanKi = 0.03, fanKd = 10;
+// TODO: add PID autotune
+/*
+  typedef struct {
+    double p;
+    double i;
+    double d;
+  } PID_t;
 
-// specify the links and initial tuning parameters
+  PID_t headerPID = {
+    4.00,
+    0.05,
+    2.00
+  };
+
+  PID_t fanPID = {
+     1.00,
+     0.03,
+    10.00
+  };
+*/
+
+double Kp = 4,
+       Ki = 0.05,
+       Kd = 2;
+
+double fanKp =  1,
+       fanKi =  0.03,
+       fanKd = 10;
+
 PID PID(&Input, &Output, &Setpoint, Kp, Ki, Kd, DIRECT);
 
-unsigned int fanValue, heaterValue;
+uint8_t fanValue;
+uint8_t heaterValue;
 
-// bits for keeping track of the temperature ramp
+// ----------------------------------------------------------------------------
+
 #define NUMREADINGS 10
 
-// TODO: refactor to use integers
-
 double airTemp[NUMREADINGS];
-double runningTotalRampRate; 
-double rampRate = 0;
+double readingsT1[NUMREADINGS]; // the readings used to make a stable temp rolling average
+double readingsT2[NUMREADINGS];
 
+double runningTotalRampRate;
+double rampRate = 0;
 double rateOfRise = 0;          // the result that is displayed
 
-double readingsT1[NUMREADINGS]; // the readings used to make a stable temp rolling average
-double readingsT2[NUMREADINGS]; 
-unsigned short index = 0;       // the index of the current reading
 double totalT1 = 0;             // the running total
 double totalT2 = 0;
+
 double averageT1 = 0;           // the average
 double averageT2 = 0;
 
-// this is a flag used to store the state of the stop key pin on the last cycle 
-// through the main loop if the stop key state changes, we perform an action, 
-// not EVERY time we find the key is down... this is to prevent multiple
-// triggers from a single keypress
-boolean lastStopPin = true; 
+uint8_t index = 0;              // the index of the current reading
 
-#ifdef OPENDRAWER
-boolean openedDrawer = false;
-#endif
+// ----------------------------------------------------------------------------
 
-// state machine bits
 enum state {
   idle,
   rampToSoak,
@@ -298,28 +295,70 @@ enum state {
   coolDown
 };
 
-state currentState = idle, lastState = idle;
-boolean stateChanged = false;
+state currentState = idle;
+state lastState    = idle;
+
+bool stateChanged = false;
+
+volatile bool requestPoll = false;
+volatile bool requestStop = false;
 
 // ----------------------------------------------------------------------------
+// timer interrupt handling
 
-#ifdef USE_CLICKENCODER
-volatile bool doPoll = false;
-
+// ticks with 100µS
 void timerIsr(void) {
-  if (currentState == idle) {
+  static uint32_t lastTicks = 0;
+
+  // Phase Control for the fan 
+  if (++phaseCounter > 90) {
+    phaseCounter = 0;
+  }
+
+  if (phaseCounter >= Channels[CHANNEL_FAN].target) {
+    PORTD &= ~(1 << Channels[CHANNEL_FAN].pin);
+  }
+  else {
+    PORTD |=  (1 << Channels[CHANNEL_FAN].pin);
+  }
+
+  // wave packet control for heater
+  if (Channels[CHANNEL_HEATER].next > lastTicks // FIXME: this looses ticks when overflowing
+      && timerTicks > Channels[CHANNEL_HEATER].next) 
+  {
+    if (Channels[CHANNEL_HEATER].action) PORTD |= (1 << Channels[CHANNEL_HEATER].pin);
+    else PORTD &= ~(1 << Channels[CHANNEL_HEATER].pin);
+    lastTicks = timerTicks;
+  }
+
+  // request ui / encoder update
+  if (!(timerTicks % 10)) {
     myMenu.Encoder->service();
-    doPoll = true;
+    if (currentState == idle) {
+      requestPoll = true;
+    } 
+    else {
+      switch(myMenu.Encoder->getButton()) {
+        case ClickEncoder::Clicked:
+        case ClickEncoder::DoubleClicked:
+        case ClickEncoder::Pressed:
+          requestStop = true;
+          break;
+      }
+    }
+  }
+
+  timerTicks++;
+
+  if (zxLoopCalibration.iterations) {
+    zxLoopCalibration.measure[zxLoopCalibration.iterations]++;
   }
 }
-#endif
 
 // ----------------------------------------------------------------------------
 
 void abortWithError(int error) {
-  // set outputs off for safety.
-  digitalWrite(PIN_FAN, LOW);
-  digitalWrite(PIN_HEATER, LOW);
+  killRelayPins();
 
   lcd.clear();
 
@@ -360,8 +399,7 @@ void displayThermocoupleData(struct tcInput* input) {
   switch (input->stat) {
     case 0:
       lcd.print(input->temperature, 1);
-      lcd.print((char)223);// degrees symbol!
-      lcd.print("C");
+      lcd.print((char)223); lcd.print("C");
       break;
     case 1:
       lcd.print("---");
@@ -369,86 +407,73 @@ void displayThermocoupleData(struct tcInput* input) {
   }
 }
 
-void updateDisplay(){
+// ----------------------------------------------------------------------------
+
+void updateDisplay() {
   lcd.clear();
 
   displayThermocoupleData(&A);
-
   lcd.print(" ");
-  
   displayThermocoupleData(&B);
 
   if (currentState != idle) {
-    lcd.setCursor(16, 0);
-    lcd.print((millis() - startTime) / 1000);
-    lcd.print("S");
+    lcd.setCursor(16, 0);    
+    lcd.print((zeroCrossTicks - startZeroCrossTicks) / 100);
+    lcd.print("s");
   }
-
   lcd.setCursor(0, 1);
+
   switch (currentState) {
-    case idle:
-      lcd.print("Idle ");
-      break;
-    case rampToSoak:
-      lcd.print("Ramp ");
-      break;
-    case soak:
-      lcd.print("Soak ");
-      break;
-    case rampUp:
-      lcd.print("Ramp Up ");
-      break;
-    case peak:
-      lcd.print("Peak ");
-      break;
-    case rampDown:
-      lcd.print("Ramp Down ");
-      break;
-    case coolDown:
-      lcd.print("Cool Down ");
-      break;
+    case idle:       lcd.print("Idle");      break;
+    case rampToSoak: lcd.print("Ramp");      break;
+    case soak:       lcd.print("Soak");      break;
+    case rampUp:     lcd.print("Ramp Up");   break;
+    case peak:       lcd.print("Peak");      break;
+    case rampDown:   lcd.print("Ramp Down"); break;
+    case coolDown:   lcd.print("Cool Down"); break;
   }
 
+  lcd.setCursor(11, 1);
   lcd.print("Sp=");
-  lcd.print(Setpoint,1);
-  lcd.print((char)223);// degrees symbol!
-  lcd.print("C");
+  lcd.print(Setpoint, 1);
+  lcd.print((char)223); lcd.print("C");
+
   lcd.setCursor(0,2);
   lcd.print("Heat=");
   lcd.print((int)heaterValue);
+  lcd.print('%');
+
   lcd.setCursor(10,2);
   lcd.print("Fan=");
   lcd.print((int)fanValue);
+  lcd.print('%');
+  
   lcd.setCursor(0,3);
   lcd.print("Ramp=");
-  lcd.print(rampRate,1);
-  lcd.print((char)223);// degrees symbol!
-  lcd.print("C/S");
+  lcd.print(rampRate, 1);
+  lcd.print((char)223);
+  lcd.print("C/s");
 }
 
-boolean getJumperState() {
-  boolean result = false; // jumper open
-#if PIN_JUMPER > 0
-  unsigned int val = analogRead(PIN_JUMPER);
-  if (val < 500) result = true;
-#endif
-  return result;
-}
+// ----------------------------------------------------------------------------
 
 void setup() {
   Serial.begin(57600);
-  Serial.print("Starting...");
+
+  setupRelayPins();
 
   lcd.begin(LCD_CHARS, LCD_LINES);
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print("Starting...");
+  lcd.createChar(ICON_LEFT,  left);
+  lcd.createChar(ICON_RIGHT, right);
+  lcd.createChar(ICON_BACK,  back);
+  lcd.createChar(ICON_DOT,   dot);
 
   A.chipSelect = THERMOCOUPLE1_CS;
   B.chipSelect = THERMOCOUPLE2_CS;
 
-  boolean jumperState = getJumperState(); // open for T962(A/C) use, closed for toaster conversion kit keypad
-  myMenu.init(&control, &lcd, jumperState);
+  myMenu.init(&control, &lcd, false);
 
   // initialise the menu strings (stored in the progmem), min and max values, pointers to variables etc
   control.init(F("Cycle start"),  &cycleStart);
@@ -458,7 +483,7 @@ void setup() {
   soak_duration.init(F("Soak time (S)"), &activeProfile.soakDuration,10,300,false);
   peak_temp.init(F("Peak temp (C)"), &activeProfile.peakTemp,100,300,false);
   peak_duration.init(F("Peak time (S)"), &activeProfile.peakDuration,5,60,false);
-  rampDown_rate.init(F("Ramp down rate (C/S)"), &activeProfile.rampDownRate, 0.1, 10);
+  rampDown_rate.init(F("Ramp down rate(C/S)"), &activeProfile.rampDownRate, 0.1, 10);
   profileLoad.init(F("Load Profile"), &loadProfile, &profileNumber, F("Select Profile"), 0, 29,true);
   profileSave.init(F("Save Profile"), &saveProfile, &profileNumber, F("Select Profile"), 0, 29,true);
   fan_control.init(F("Fan settings"));
@@ -477,7 +502,6 @@ void setup() {
 
   // this needs to be replaced with a better menu structure. This relies on being able to 
   // have a menu item that allows the user to choose a number then be sent to another menu item
-  // toby... over to you.
   control.addItem(&profileLoad);
   control.addItem(&profileSave);
 
@@ -486,13 +510,8 @@ void setup() {
   fan_control.addChild(&idle_speed);
   idle_speed.addItem(&save_fan_speed);
 
-  //factory reset function
+  // factory reset function
   control.addItem(&factory_reset);
-
-#ifdef OPENDRAWER
-  pinMode(PIN_DRAWER, OUTPUT);
-  digitalWrite(PIN_DRAWER, LOW);
-#endif
 
   if (firstRun()) {
     factoryReset();
@@ -516,8 +535,6 @@ void setup() {
   //pinMode(10,OUTPUT);
   //digitalWrite(10,HIGH); // set the pull up on the SS pin (SPI doesn't work otherwise!!)
 
-  clr = 0;
-
   //The SPI control register (SPCR) has 8 bits, each of which control a particular SPI setting.
   // SPCR
   // | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0 |0000000000000000000
@@ -532,17 +549,13 @@ void setup() {
 
   SPCR = (1<<SPE) | (1<<MSTR) | (1<<CPHA); // SPI enable bit set, master, data valid on falling edge of clock
 
+  byte clr = 0;
   clr = SPSR;
   clr = SPDR;
 
   delay(10);
 
-  pinMode(PIN_FAN, OUTPUT);
-  pinMode(PIN_HEATER, OUTPUT);
-
-  PID.SetOutputLimits(0, WindowSize);
-
-  // turn the PID on
+  PID.SetOutputLimits(0, 100); // max output 100%
   PID.SetMode(AUTOMATIC);
 
   readThermocouple(&A);
@@ -557,43 +570,49 @@ void setup() {
     airTemp[i] = A.temperature; 
   }
 
-  lcd.clear();
-  lcd.print(" ESTechnical.co.uk");
-  lcd.setCursor(0,1);
-  lcd.print(" Reflow controller");
-  lcd.setCursor(0,2);
-  lcd.print("      v");
-  lcd.print(ver);
-  delay(3000);
-
-  myMenu.showCurrent();
-
-#ifdef USE_CLICKENCODER
-  Timer1.initialize(1000);
+  Timer1.initialize(100);
   Timer1.attachInterrupt(timerIsr);
-#endif
 
-#if PIN_INT_ZX >= 0
-  attachInterrupt(PIN_INT_ZX, zeroCrossingIsr, RISING);
-#endif
+  pinMode(PIN_ZX, INPUT_PULLUP);
+  attachInterrupt(INT_ZX, zeroCrossingIsr, RISING);
+  delay(100);
+
+  lcd.clear();
+  lcd.print(" Reflow controller");
+  lcd.setCursor(0, 1);
+  lcd.print("      v"); lcd.print(ver);
+
+  // autocalibrate zero cross timing delay
+  lcd.setCursor(0, 3);
+  lcd.print("Calibrating... ");
+  delay(500);
+
+  while (zxLoopDelay == 0) {
+    if (zxLoopCalibration.iterations < 1) {
+      for (uint8_t l = 0; l < zxCalibrationLoops; l++) {
+        zxLoopDelay += zxLoopCalibration.measure[l];
+      }
+      zxLoopDelay /= zxCalibrationLoops;
+      zxLoopDelay -= 6; // offset calibration loop runtime
+    }
+  }
+
+  lcd.print(zxLoopDelay);
+  delay(1000);  
+
+  // enter main menu
+  myMenu.showCurrent();
 }
+
+// ----------------------------------------------------------------------------
 
 void loop(void)
 {
-#ifdef USE_CLICKENCODER
-  if (doPoll) {
-    doPoll = false;
-    myMenu.poll();
-  }
-#endif
+  // zeroCrossTicks / 100 -> 1 second -> 100 ticks per second
 
-  if (millis() - lastUpdate >= 100) {
-#ifdef DEBUG
-    Serial.print("freeMemory()=");
-    Serial.println(freeMemory());
-#endif
 
-    lastUpdate = millis();
+  if (zeroCrossTicks - lastUpdate >= 10) {
+    lastUpdate = zeroCrossTicks;
 
     readThermocouple(&A);
     readThermocouple(&B);
@@ -602,15 +621,15 @@ void loop(void)
       abortWithError(3);
     }
 
-/*
-int samples[8];
+/* moving average
+    int samples[8];
 
-total -= samples[i];
-samples[i] = A.temperature;
-total += samples[i];
+    total -= samples[i];
+    samples[i] = A.temperature; // new value
+    total += samples[i];
 
-i = (i + 1) % 8; // next position
-average = total >> 3;
+    i = (i + 1) % 8; // next position
+    average = total >> 3; // == div by 8
 */
 
     // rolling average of the temp T1 and T2
@@ -623,9 +642,8 @@ average = total >> 3;
     totalT1 += readingsT1[index]; // add the reading to the total
     totalT2 += readingsT2[index]; 
     
-    index = (index + 1) % 8; // next position
+    index = (index + 1) % NUMREADINGS; // next position
 
-    // TEST: averageT1 = totalT1 >> 3;
     averageT1 = totalT1 / NUMREADINGS;  // calculate the average temp
     averageT2 = totalT2 / NUMREADINGS;
 
@@ -642,22 +660,21 @@ average = total >> 3;
 
     Input = airTemp[NUMREADINGS - 1]; // update the variable the PID reads
 
+    if (zeroCrossTicks - lastDisplayUpdate > 25) { // 4hz display during reflow cycle
+      if (requestPoll) {
+        requestPoll = false;
+        myMenu.poll();
+      }
 
-    if (currentState == idle) {
-#ifndef USE_CLICKENCODER
-      myMenu.poll();
-#endif
-    }
-    else {
-      if (millis() - lastDisplayUpdate > 250) { // 4hz display during reflow cycle
-        lastDisplayUpdate = millis();
+      if (currentState != idle) {
+        lastDisplayUpdate = zeroCrossTicks;
         updateDisplay();
       }
     }
 
-#if 0 // !NO_SERIAL || WITH_SERIAL
-    if (millis() - lastSerialOutput > 250) {
-      lastSerialOutput = millis();
+#if WITH_SERIAL
+    if (zeroCrossTicks - lastSerialOutput > 25) {
+      lastSerialOutput = zeroCrossTicks;
 
       if (currentState == idle) {
         Serial.print("0,0,0,0,0,"); 
@@ -669,14 +686,10 @@ average = total >> 3;
         else {
           Serial.print("999"); 
         }
-      #ifdef DEBUG
-        Serial.print(",");
-        Serial.print(freeMemory());
-      #endif
         Serial.println();
       } 
       else {
-        Serial.print((millis() - startTime));
+        Serial.print((zeroCrossTicks - startZeroCrossTicks) / 100);
         Serial.print(",");
         Serial.print((int)currentState);
         Serial.print(",");
@@ -694,19 +707,13 @@ average = total >> 3;
         else {
           Serial.print("999"); 
         }
-      #ifdef DEBUG
-        Serial.print(",");
-        Serial.print(freeMemory());
-      #endif
         Serial.println();
       }
     }
 #endif
 
-#if BUTTON_STOP > 0
-    // check for the stop or back key being pressed
-    boolean stopPin = digitalRead(BUTTON_STOP); // check the state of the stop key
-    if (stopPin == LOW && lastStopPin != stopPin) { // if the state has just changed
+    if (requestStop) {
+      requestStop = false;
       if (currentState == coolDown) {
         currentState = idle;
       } 
@@ -714,14 +721,12 @@ average = total >> 3;
         currentState = coolDown;
       }
     }
-    lastStopPin = stopPin;
-#endif
 
     // if the state has changed, set the flags and update the time of state change
     if (currentState != lastState) {
       lastState = currentState;
       stateChanged = true;
-      stateChangedTime = millis();
+      stateChangedTicks = zeroCrossTicks;
     }
 
     switch (currentState) {
@@ -752,7 +757,7 @@ average = total >> 3;
           stateChanged = false;
         }
 
-        if (millis() - stateChangedTime >= (unsigned long)activeProfile.soakDuration * 1000) {
+        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.soakDuration * 100) {
           currentState = rampUp;
         }
         break;
@@ -776,7 +781,7 @@ average = total >> 3;
           stateChanged = false;
         }
 
-        if (millis() - stateChangedTime >= (unsigned long)activeProfile.peakDuration * 1000) {
+        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.peakDuration * 100) {
           currentState = rampDown;
         }
         break;
@@ -788,15 +793,6 @@ average = total >> 3;
           stateChanged = false;
           Setpoint = activeProfile.peakTemp - 15; // get it all going with a bit of a kick! v sluggish here otherwise, too hot too long
         }
-
-#ifdef OPENDRAWER
-        if (!openedDrawer) {
-          openedDrawer = true;
-          digitalWrite(PIN_DRAWER, HIGH);
-          delay(5);
-          digitalWrite(PIN_DRAWER, LOW);
-        }
-#endif
 
         Setpoint -= (activeProfile.rampDownRate / 10); 
 
@@ -823,13 +819,9 @@ average = total >> 3;
   // safety check that we're not doing something stupid. 
   // if the thermocouple is wired backwards, temp goes DOWN when it increases
   // during cooling, the t962a lags a long way behind, hence the hugely lenient cooling allowance.
-
   // both of these errors are blocking and do not exit!
-#ifndef OPENDRAWER
-  if (Setpoint > Input + 50) abortWithError(1);// if we're 50 degree cooler than setpoint, abort
-#endif
-
-  //if(Input > Setpoint + 50) abortWithError(2);// or 50 degrees hotter, also abort
+  if (Setpoint > Input + 50) abortWithError(1); // if we're 50 degree cooler than setpoint, abort
+  //if (Input > Setpoint + 50) abortWithError(2); // or 50 degrees hotter, also abort
 
   PID.Compute();
 
@@ -842,38 +834,19 @@ average = total >> 3;
     fanValue = Output;
   }
 
-  if (millis() - windowStartTime > WindowSize) { // time to shift the Relay Window
-    windowStartTime += WindowSize;
-  }
-
-  if (heaterValue < millis() - windowStartTime) {
-    digitalWrite(PIN_HEATER, LOW);
-  } 
-  else {
-    digitalWrite(PIN_HEATER, HIGH);
-  }
-
-  if (fanValue < millis() - windowStartTime) {
-    digitalWrite(PIN_FAN, LOW);
-  }
-  else {
-    digitalWrite(PIN_FAN, HIGH);
-  }
+  Channels[CHANNEL_HEATER].target = heaterValue;
+  Channels[CHANNEL_FAN].target = 90 / 100 * fanValue; // 0-100% -> 0-90° phase control
 }
 
 
 void cycleStart() {
-  startTime = millis();
+  requestStop = false;
+  startZeroCrossTicks = zeroCrossTicks;
   currentState = rampToSoak;
-
-#ifdef OPENDRAWER
-  openedDrawer = false;
-#endif
 
   lcd.clear();
   lcd.print("Starting cycle ");
   lcd.print(profileNumber);
-
   delay(1000);
 }
 
@@ -908,16 +881,13 @@ void saveProfile(unsigned int targetProfile) {
   delay(500); 
 }
 
-void loadProfile(unsigned int targetProfile){
-  // We may be able to do-away with profileNumber entirely now the selection is done in-function.
-  profileNumber = targetProfile;
+void loadProfile(unsigned int targetProfile) {
   lcd.clear();
   lcd.print("Loading profile ");
-  lcd.print(profileNumber);
-  saveLastUsedProfile();
+  lcd.print(targetProfile);
 
 #ifdef DEBUG
-  Serial.println("Check parameters:");
+  Serial.println("current parameters:");
   Serial.print("idleTemp ");
   Serial.println(idleTemp);
   Serial.print("ramp Up rate ");
@@ -935,10 +905,10 @@ void loadProfile(unsigned int targetProfile){
   Serial.println("About to load parameters");
 #endif
 
-  loadParameters(profileNumber);
+  bool ok = loadParameters(targetProfile);
 
 #ifdef DEBUG
-  Serial.println("Check parameters:");
+  Serial.println("loaded parameters:");
   Serial.print("idleTemp ");
   Serial.println(idleTemp);
   Serial.print("ramp Up rate ");
@@ -953,163 +923,155 @@ void loadProfile(unsigned int targetProfile){
   Serial.println(activeProfile.peakDuration);
   Serial.print("rampDownRate ");
   Serial.println(activeProfile.rampDownRate);
+  Serial.print("checksum ");
+  Serial.println(activeProfile.checksum);
   Serial.println("after loading parameters");
 #endif
+
+  if (!ok) {
+    lcd.setCursor(0, 2);
+    lcd.print("Checksum error!");
+    lcd.setCursor(0, 3);
+    lcd.print("Review profile.");
+    delay(2500);
+  }
+
+  // save in any way, we have no undo
+  profileNumber = targetProfile;
+  saveLastUsedProfile();
 
   delay(500);
 }
 
+bool saveParameters(uint8_t profile) {
+  uint16_t offset = profile * sizeof(Profile_t);
 
-// TODO: move parameters to struct and dump it to eeprom
-// TODO: add eeprom checksum
-//
-void saveParameters(unsigned int profile){
-  unsigned int offset = 0;
-  if (profile != 0) {
-    offset = profile * 16;
-  }
+  activeProfile.checksum = crc8((uint8_t *)&activeProfile, sizeof(Profile_t) - sizeof(uint8_t));
 
-  EEPROM.write(offset,lowByte(activeProfile.soakTemp));
-  offset++;
-  EEPROM.write(offset,highByte(activeProfile.soakTemp));
-  offset++;
+  do {} while (!(eeprom_is_ready()));
+  eeprom_write_block(&activeProfile, (void *)offset, sizeof(Profile_t));
 
-  EEPROM.write(offset,lowByte(activeProfile.soakDuration));
-  offset++;
-  EEPROM.write(offset,highByte(activeProfile.soakDuration));
-  offset++;
-
-  EEPROM.write(offset,lowByte(activeProfile.peakTemp));
-  offset++;
-  EEPROM.write(offset,highByte(activeProfile.peakTemp));
-  offset++;
-
-  EEPROM.write(offset,lowByte(activeProfile.peakDuration));
-  offset++;
-  EEPROM.write(offset,highByte(activeProfile.peakDuration));
-  offset++;
-
-  int temp = activeProfile.rampUpRate * 10;
-  EEPROM.write(offset,(temp & 255));
-  offset++;
-  EEPROM.write(offset,(temp >> 8) & 255);
-  offset++;
-
-  temp = activeProfile.rampDownRate * 10;
-  EEPROM.write(offset,(temp & 255));
-  offset++;
-  EEPROM.write(offset,(temp >> 8) & 255);
-  offset++;
-
+  return true;
 }
 
-void loadParameters(unsigned int profile) {
-  unsigned int offset = 0;
-  if (profile != 0) {
-    offset = profile * 16;
-  }
+bool loadParameters(uint8_t profile) {
+  uint16_t offset = profile * sizeof(Profile_t);
 
-  activeProfile.soakTemp = EEPROM.read(offset);
-  offset++;
-  activeProfile.soakTemp |= EEPROM.read(offset) << 8;
-  offset++;
+  do {} while (!(eeprom_is_ready()));
+  eeprom_read_block(&activeProfile, (void *)offset, sizeof(Profile_t));
 
-  activeProfile.soakDuration = EEPROM.read(offset);
-  offset++;
-  activeProfile.soakDuration |= EEPROM.read(offset) << 8;
-  offset++;
-
-  activeProfile.peakTemp = EEPROM.read(offset);
-  offset++;
-  activeProfile.peakTemp |= EEPROM.read(offset) << 8;
-  offset++;
-
-  activeProfile.peakDuration = EEPROM.read(offset);
-  offset++;
-  activeProfile.peakDuration |= EEPROM.read(offset) << 8;
-  offset++;
-
-  int temp = EEPROM.read(offset);
-  offset++;
-  temp |= EEPROM.read(offset) << 8;
-  offset++;
-  activeProfile.rampUpRate = ((double)temp / 10);
-
-  temp = EEPROM.read(offset);
-  offset++;
-  temp |= EEPROM.read(offset) << 8;
-  offset++;
-  activeProfile.rampDownRate = ((double)temp / 10);
+  return activeProfile.checksum == crc8((uint8_t *)&activeProfile, sizeof(Profile_t) - sizeof(uint8_t));
 }
 
-
-boolean firstRun() { // we check the whole of the space of the 16th profile, if all bytes are 255, we are doing the very first run
-  unsigned int offset = 16;
-  for (unsigned int i = offset * 15; i < (offset * 15) + 16; i++) {
+bool firstRun() { 
+  // if all bytes of a profile in the middle of the eeprom space are 255, we assume it's a first run
+  unsigned int offset = 15 * sizeof(Profile_t);
+  for (uint16_t i = offset; i < offset + sizeof(Profile_t); i++) {
     if (EEPROM.read(i) != 255) {
       return false;
     }
   }
+
   lcd.clear();
   lcd.print("First run...");
   delay(500);
+
   return true;
 }
 
+void makeDefaultProfile(void) {
+  activeProfile.soakTemp     = 130;
+  activeProfile.soakDuration =  80;
+  activeProfile.peakTemp     = 220;
+  activeProfile.peakDuration =  40;
+  activeProfile.rampUpRate   =   0.80;
+  activeProfile.rampDownRate =   2.0;
+}
+
 void factoryReset() {
-  // clear any adjusted settings first, just to be sure...
-  activeProfile.soakTemp = 130;
-  activeProfile.soakDuration = 80;
-  activeProfile.peakTemp = 220;
-  activeProfile.peakDuration = 40;
-  activeProfile.rampUpRate = 0.80;
-  activeProfile.rampDownRate = 2.0; 
+  makeDefaultProfile();
 
   lcd.clear();
   lcd.print("Resetting...");
 
   // then save the same profile settings into all slots
-  for (int i = 0; i < 30; i++) {
+  for (uint8_t i = 0; i < 30; i++) {
     saveParameters(i);
   }
 
   fanAssistSpeed = 50;
   saveFanSpeed();
+
   profileNumber = 0;
   saveLastUsedProfile();
+
   delay(500);
 }
 
 void saveFanSpeed(){
-  unsigned int temp = (unsigned int)fanAssistSpeed;
-  EEPROM.write(offsetFanSpeed_, (temp & 255));
-  //Serial.print("Saving fan speed :");
-  //Serial.println(temp);
   lcd.clear();
   lcd.print("Saving...");
+  EEPROM.write(offsetFanSpeed, (uint8_t)fanAssistSpeed & 0xff);
   delay(250);
 }
 
 void loadFanSpeed(){
-  unsigned int temp = 0;
-  temp = EEPROM.read(offsetFanSpeed_);
-  fanAssistSpeed = (int)temp;
-  //Serial.print("Loaded fan speed :");
-  //Serial.println(fanAssistSpeed);
+  fanAssistSpeed = EEPROM.read(offsetFanSpeed) & 0xff;
 }
 
 void saveLastUsedProfile(){
-  unsigned int temp = (unsigned int)profileNumber;
-  EEPROM.write(offsetProfileNum_, (temp & 255));
-  //Serial.print("Saving active profile number :");
-  //Serial.println(temp);
+  EEPROM.write(offsetProfileNum, (uint8_t)profileNumber & 0xff);
 }
 
 void loadLastUsedProfile(){
-  unsigned int temp = 0;
-  temp = EEPROM.read(offsetProfileNum_);
-  profileNumber = (int)temp;
-  //Serial.print("Loaded last used profile number :");
-  //Serial.println(temp);
+  profileNumber = EEPROM.read(offsetProfileNum) & 0xff;
   loadParameters(profileNumber);
+}
+
+// ---------------------------------------------------------------------------- 
+// crc8
+//
+// Copyright (c) 2002 Colin O'Flynn
+// Minor changes by M.Thomas 9/2004 
+// ----------------------------------------------------------------------------
+
+#define CRC8INIT    0x00
+#define CRC8POLY    0x18              //0X18 = X^8+X^5+X^4+X^0
+
+// ----------------------------------------------------------------------------
+
+uint8_t crc8(uint8_t *data, uint16_t number_of_bytes_in_data)
+{
+  uint8_t  crc;
+  uint8_t  bit_counter;
+  uint8_t  b;
+  uint8_t  feedback_bit;
+  uint16_t loop_count;
+  
+  crc = CRC8INIT;
+
+  for (loop_count = 0; loop_count != number_of_bytes_in_data; loop_count++) {
+    b = data[loop_count];
+        bit_counter = 8;
+
+        do {
+            feedback_bit = (crc ^ b) & 0x01;
+
+            if (feedback_bit == 0x01) {
+                crc = crc ^ CRC8POLY;
+            }
+
+            crc = (crc >> 1) & 0x7F;
+
+            if (feedback_bit == 0x01) {
+                crc = crc | 0x80;
+            }
+
+            b = b >> 1;
+            bit_counter--;
+
+        } while (bit_counter > 0);
+    }
+  
+  return crc;
 }

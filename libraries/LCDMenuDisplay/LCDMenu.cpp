@@ -13,6 +13,11 @@
 #include "Arduino.h"
 #include "LCDMenu.h"
 
+#define ICON_LEFT  0
+#define ICON_RIGHT 1
+#define ICON_BACK  2
+#define ICON_DOT   3
+
 LCDMenu::LCDMenu() {
 	lastKey = none;
 }
@@ -28,8 +33,8 @@ void LCDMenu::init(MenuItem *initial, LiquidCrystal *lcd, boolean fourkey) {
 
 	fourkeys = fourkey;
 			
-	this->Current = initial;
-	this->Editing = NULL;
+	Current = initial;
+	Editing = NULL;
 	update = true;
 }
 
@@ -40,24 +45,24 @@ void LCDMenu::poll() {
     encMovement = Encoder->getValue();
     if (encMovement) {
       update = true;
-      editing = this->Editing != NULL;
+      editing = Editing != NULL;
 	  if (encMovement > 0) {
-	  	editing ? this->Editing->inc(this, encMovement) : this->moveToNext();
+	  	editing ? Editing->inc(this, encMovement) : moveToNext();
 	  }
 	  else {
-	  	editing ? this->Editing->dec(this, encMovement * -1) : this->moveToPrev();
+	  	editing ? Editing->dec(this, encMovement * -1) : moveToPrev();
 	  }
     }
 
 	switch (Encoder->getButton()) {
       case ClickEncoder::Clicked:
     	update = true;
-	    this->Current->select(this);
+	    Current->select(this);
         break;
 
       case ClickEncoder::DoubleClicked:
 		update = true;
-        this->Current->exit(this);
+        Current->exit(this);
         break;
 
       case ClickEncoder::Held:
@@ -72,8 +77,8 @@ void LCDMenu::poll() {
 
 	if (update) {
 		update = false;
-	    editing = this->Editing != NULL;
-		editing ? this->showCurrentValue() : this->showCurrent();
+	    editing = Editing != NULL;
+		editing ? showCurrentValue() : showCurrent();
 		Encoder->setAccelerationEnabled(editing);
 	}
 }
@@ -135,27 +140,27 @@ void LCDMenu::poll() {
 
 		switch (pressedKey) {
 			case up:
-				if (this->Editing == NULL) {
-					this->moveToNext();
+				if (Editing == NULL) {
+					moveToNext();
 				} else { 
-					this->Editing->inc(this);
+					Editing->inc(this);
 				}
 				break;
 
 			case down:
-				if (this->Editing == NULL) {
-					this->moveToPrev();
+				if (Editing == NULL) {
+					moveToPrev();
 				} else {
-					this->Editing->dec(this);
+					Editing->dec(this);
 				}
 				break;
 
 			case ok:
-				this->Current->select(this);
+				Current->select(this);
 				break;
 
 			case back: case stop:
-				this->Current->exit(this);
+				Current->exit(this);
 				break;
 
 			case none:
@@ -165,35 +170,39 @@ void LCDMenu::poll() {
 
 	if (update) {
 		update = false;		
-		if (this->Editing == NULL) {
-			this->showCurrent();
+		if (Editing == NULL) {
+			showCurrent();
 		} else {
-			this->showCurrentValue();
+			showCurrentValue();
 		}
 	}
 }
 #endif
 
-void LCDMenu::showCurrent () {
+void LCDMenu::showCurrent() {
 	LCD->clear();
-	this->Current->Name_P ? LCD->print(this->Current->Name_P) : LCD->print(this->Current->Name);
+	(Current->Previous) ? LCD->write((uint8_t)ICON_LEFT) : LCD->write((uint8_t)20);
+	Current->Name_P ? LCD->print(Current->Name_P) : LCD->print(Current->Name);
+	(Current->Next) ? LCD->write((uint8_t)ICON_RIGHT) : LCD->write((uint8_t)20);
 
 	LCD->setCursor(0, 3);
 	LCD->print ("OK  <   >");
-	if (this->Current && this->Current->Parent) {
+	if (Current && Current->Parent) {
 		LCD->print("   Back");
 	}
 }
 
 void LCDMenu::showCurrentValue() {
 	char buffer[20];
-	this->Current->getValueString(buffer);
+	Current->getValueString(buffer);
 
 	LCD->clear();
-	this->Current->Name_P ? LCD->print(this->Current->Name_P) : LCD->print(this->Current->Name);
+	LCD->write((uint8_t)ICON_DOT);
+	Current->Name_P ? LCD->print(Current->Name_P) : LCD->print(Current->Name);
+	LCD->write((uint8_t)ICON_BACK);
 
 	LCD->setCursor(0, 1);
-	this->Current->HelpText ? LCD->print(this->Current->HelpText) : LCD->print("Editing ");
+	Current->HelpText ? LCD->print(Current->HelpText) : LCD->print("Editing ");
 
 	LCD->setCursor(0,2);
 	LCD->print(buffer);

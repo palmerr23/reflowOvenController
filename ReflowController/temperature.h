@@ -21,22 +21,23 @@ char spi_transfer(volatile char data) {
 
 void readThermocouple(struct tcInput* input) {
   
-  return;
-
   digitalWrite(input->chipSelect, LOW);
+  //Serial.print("active tc ");
+  //Serial.println(input->chipSelect);
 
   uint32_t result = 0x0000;
   byte reply = 0;
   char data = 0; // dummy data to write
   
   for (int i = 0; i < 4; i++) { // read the 32 data bits from the MAX31855
+    //Serial.print(".");
     reply = spi_transfer(data);
     result = result << 8;
     result |= reply;
   }
 
   //Serial.print("Read result is: ");
-  //Serial.print(result, BIN);
+  //Serial.println(result, BIN);
   
   result >>= 18;
   
@@ -47,6 +48,9 @@ void readThermocouple(struct tcInput* input) {
   input->temperature = value * 0.25;
   
   digitalWrite(input->chipSelect, HIGH);
+  //Serial.print("  inactive tc ");
+  //Serial.println(input->chipSelect);
+
 }
 
 #endif

@@ -24,7 +24,6 @@ void MenuItemSelect::AddOption (char *Name, int Value) {
 	Pointer = &(this->RootOption);
 	while (*Pointer != NULL) {
 		Pointer = &((*Pointer)->Next);
-//		Serial.print ("Moving to next");
 	}
 	*Pointer = new MenuItemSelectOption;
 	(*Pointer)->Next = NULL;
