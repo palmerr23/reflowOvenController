@@ -120,7 +120,7 @@ struct {
   zxCalibrationLoops, {}
 };
 
-// Zero Crossing ISR; per ZX, process one channel only
+// Zero Crossing ISR; per ZX, process one channel per interrupt only
 // NB: use native port IO instead of digitalWrite for better performance
 void zeroCrossingIsr(void) {
   static uint8_t ch = 0;
@@ -315,7 +315,7 @@ void timerIsr(void) {
     phaseCounter = 0;
   }
 
-  if (phaseCounter >= Channels[CHANNEL_FAN].target) {
+  if (phaseCounter > Channels[CHANNEL_FAN].target) {
     PORTD &= ~(1 << Channels[CHANNEL_FAN].pin);
   }
   else {
@@ -457,7 +457,9 @@ void updateDisplay() {
 // ----------------------------------------------------------------------------
 
 void setup() {
+//#ifdef WITH_SERIAL
   Serial.begin(57600);
+//#endif
 
   setupRelayPins();
 
@@ -665,8 +667,9 @@ void loop(void)
       if (currentState != idle) {
         updateDisplay();
       }
-
       lastDisplayUpdate = zeroCrossTicks;
+
+
     }
 
 #if WITH_SERIAL
@@ -832,7 +835,9 @@ void loop(void)
   }
 
   Channels[CHANNEL_HEATER].target = heaterValue;
-  Channels[CHANNEL_FAN].target = 90 / 100 * fanValue; // 0-100% -> 0-90° phase control
+
+  double fanTmp = 90.0 / 100.0 * fanValue;
+  Channels[CHANNEL_FAN].target = 90 - (uint8_t)fanTmp; // 0-100% -> 0-90° phase control
 }
 
 
