@@ -310,7 +310,7 @@ volatile bool requestStop = false;
 void timerIsr(void) {
   static uint32_t lastTicks = 0;
 
-  // Phase Control for the fan 
+  // phase control for the fan 
   if (++phaseCounter > 90) {
     phaseCounter = 0;
   }
@@ -336,12 +336,11 @@ void timerIsr(void) {
     myMenu.Encoder->service();
     if (currentState == idle) {
       requestPoll = true;
-    } 
+    }
     else {
       switch(myMenu.Encoder->getButton()) {
         case ClickEncoder::Clicked:
         case ClickEncoder::DoubleClicked:
-        case ClickEncoder::Pressed:
           requestStop = true;
           break;
       }
@@ -608,9 +607,6 @@ void setup() {
 
 void loop(void)
 {
-  // zeroCrossTicks / 100 -> 1 second -> 100 ticks per second
-
-
   if (zeroCrossTicks - lastUpdate >= 10) {
     lastUpdate = zeroCrossTicks;
 
@@ -619,6 +615,11 @@ void loop(void)
 
     if (A.stat != 0) {
       abortWithError(3);
+    }
+
+    if (requestPoll) {
+      requestPoll = false;
+      myMenu.poll();
     }
 
 /* moving average
@@ -660,16 +661,12 @@ void loop(void)
 
     Input = airTemp[NUMREADINGS - 1]; // update the variable the PID reads
 
-    if (zeroCrossTicks - lastDisplayUpdate > 25) { // 4hz display during reflow cycle
-      if (requestPoll) {
-        requestPoll = false;
-        myMenu.poll();
-      }
-
+    if (zeroCrossTicks - lastDisplayUpdate > 25) {
       if (currentState != idle) {
-        lastDisplayUpdate = zeroCrossTicks;
         updateDisplay();
       }
+
+      lastDisplayUpdate = zeroCrossTicks;
     }
 
 #if WITH_SERIAL
