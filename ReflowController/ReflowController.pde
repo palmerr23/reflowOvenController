@@ -182,7 +182,7 @@ const uint16_t offsetProfileNum = 30 * sizeof(Profile_t) + 2; // one byte
 int profileNumber = 0;
 boolean thermocoupleOneActive = true; // this is used to keep track of which thermocouple input is used for control
 
-tcInput A; 
+Thermocouple A; 
 // ----------------------------------------------------------------------------
 
 uint32_t startZeroCrossTicks;
@@ -756,7 +756,7 @@ void abortWithError(int error) {
 
 // ----------------------------------------------------------------------------
 
-void displayThermocoupleData(struct tcInput* input) {
+void displayThermocoupleData(struct Thermocouple* input) {
   switch (input->stat) {
     case 0:
       printDouble(input->temperature);

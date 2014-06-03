@@ -4,7 +4,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 
-typedef struct tcInput {
+typedef struct Thermocouple {
   double temperature;
   int stat;
   int chipSelect;
@@ -22,7 +22,7 @@ char spi_transfer(volatile char data) {
 }
 */
 
-void readThermocouple(struct tcInput* input) {
+void readThermocouple(struct Thermocouple* input) {
   return;
 
   digitalWrite(input->chipSelect, LOW);
