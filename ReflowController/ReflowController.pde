@@ -161,8 +161,8 @@ void zeroCrossingIsr(void) {
 
 // data type for the values used in the reflow profile
 typedef struct profileValues_s {
-  int16_t soakTemp;
-  int16_t soakDuration;
+  int16_t SoakTemp;
+  int16_t SoakDuration;
   int16_t peakTemp;
   int16_t peakDuration;
   double  rampUpRate;
@@ -183,50 +183,16 @@ int profileNumber = 0;
 boolean thermocoupleOneActive = true; // this is used to keep track of which thermocouple input is used for control
 
 tcInput A; 
-tcInput B;
 
 // ----------------------------------------------------------------------------
 // UI
 
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 ClickEncoder Encoder(A0, A1, A2, 2);
-//Menu::Engine *engine;
-
-extern const Menu::Item_t miCycleStart;
-Menu::Engine Engine(&miCycleStart);
-
-namespace State {  
-  typedef enum SystemMode_e {
-    None      = 0,
-    Default   = (1<<0),
-    Settings  = (1<<1),
-    Edit      = (1<<2)
-  } SystemMode;
-};
-
-enum state {
-  idle,
-  rampToSoak,
-  soak,
-  rampUp,
-  peak,
-  rampDown,
-  coolDown
-};
-
-state currentState = idle;
-state lastState    = idle;
-
-State::SystemMode systemState = State::Default;
-State::SystemMode previousSystemState = State::None;
-
-bool stateChanged = false;
-bool gotHeadline = false;
 
 // ----------------------------------------------------------------------------
 
 uint32_t startZeroCrossTicks;
-uint32_t stateChangedTicks = 0;
 uint32_t lastUpdate = 0;
 uint32_t lastDisplayUpdate = 0;
 uint32_t lastSerialOutput = 0;
@@ -250,6 +216,32 @@ typedef struct {
 } LastItemState_t;
 
 LastItemState_t previousItems[menuItemsVisible];
+
+// ----------------------------------------------------------------------------
+// state machine
+
+extern const Menu::Item_t miCycleStart;
+Menu::Engine Engine(&miCycleStart);
+
+typedef enum {
+  None = 0,
+  Idle,
+  Settings,
+  Edit,
+  RampToSoak,
+  Soak,
+  RampUp,
+  Peak,
+  RampDown,
+  CoolDown
+} State;
+
+State currentState  = Idle;
+State previousState = Idle;
+bool stateChanged = false;
+uint32_t stateChangedTicks = 0;
+
+bool gotHeadline = false;
 
 // ----------------------------------------------------------------------------
 // data type conversion helpers
@@ -327,11 +319,13 @@ extern const Menu::Item_t miRampUpRate, miRampDnRate, miSoakTime,
 void getEditItemValue(const Menu::Item_t *mi, double **d, int16_t **i) {
   if (mi == &miRampUpRate) *d = &activeProfile.rampUpRate;
   if (mi == &miRampDnRate) *d = &activeProfile.rampDownRate;
-  if (mi == &miSoakTime)   *i = &activeProfile.soakDuration;
-  if (mi == &miSoakTemp)   *i = &activeProfile.soakTemp;
+  if (mi == &miSoakTime)   *i = &activeProfile.SoakDuration;
+  if (mi == &miSoakTemp)   *i = &activeProfile.SoakTemp;
   if (mi == &miPeakTime)   *i = &activeProfile.peakDuration;
   if (mi == &miPeakTemp)   *i = &activeProfile.peakTemp;
 }
+
+// ----------------------------------------------------------------------------
 
 bool getEditItemLabel(const Menu::Item_t *mi, char *label) {
   int16_t *iValue = NULL;
@@ -364,11 +358,9 @@ bool getEditItemLabel(const Menu::Item_t *mi, char *label) {
 
 bool menuExit(const Menu::Action_t a) {
   Encoder.setAccelerationEnabled(encLastAccelerationState);  
-  systemState = State::Default;
   clearLastMenuItemRenderState();
   updateMenu = false;
-  tft.fillScreen(ST7735_WHITE);
-  return true;
+  return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -384,8 +376,8 @@ bool editProfileValue(const Menu::Action_t action) {
   double  *dValue = NULL;
 
   if (action == Menu::actionDisplay) {
-    bool initial = systemState != State::Edit;
-    systemState = State::Edit;
+    bool initial = currentState != Edit;
+    currentState = Edit;
 
     getEditItemValue(Engine.currentItem, &dValue, &iValue);
 
@@ -450,8 +442,8 @@ bool editProfileValue(const Menu::Action_t action) {
   }
 
   if (action == Menu::actionParent) {
-    if (systemState == State::Edit) { // leave edit mode only, returning to menu
-      systemState = State::Settings;
+    if (currentState == Edit) { // leave edit mode only, returning to menu
+      currentState = Settings;
       clearLastMenuItemRenderState();
       Encoder.setAccelerationEnabled(encLastAccelerationState);
       return false;
@@ -465,8 +457,8 @@ bool editProfileValue(const Menu::Action_t action) {
 
 bool factoryReset(const Menu::Action_t action) {
   if (action == Menu::actionDisplay) {
-    bool initial = systemState != State::Edit;
-    systemState = State::Edit;
+    bool initial = currentState != Edit;
+    currentState = Edit;
 
     if (initial) {
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
@@ -485,8 +477,8 @@ bool factoryReset(const Menu::Action_t action) {
   }
 
   if (action == Menu::actionParent) {
-    if (systemState == State::Edit) { // leave edit mode only, returning to menu
-      systemState = State::Settings;
+    if (currentState == Edit) { // leave edit mode only, returning to menu
+      currentState = Settings;
       clearLastMenuItemRenderState();
       return false;
     }
@@ -499,8 +491,8 @@ bool saveLoadProfile(const Menu::Action_t action) {
   bool isLoad = Engine.currentItem == &miLoadProfile;
 
   if (action == Menu::actionDisplay) {
-    bool initial = systemState != State::Edit;
-    systemState = State::Edit;
+    bool initial = currentState != Edit;
+    currentState = Edit;
 
     tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
@@ -533,8 +525,8 @@ bool saveLoadProfile(const Menu::Action_t action) {
   }
 
   if (action == Menu::actionParent) {    
-    if (systemState == State::Edit) { // leave edit mode only, returning to menu
-      systemState = State::Settings;
+    if (currentState == Edit) { // leave edit mode only, returning to menu
+      currentState = Settings;
       clearLastMenuItemRenderState();
       return false;
     }
@@ -546,10 +538,18 @@ bool saveLoadProfile(const Menu::Action_t action) {
 bool cycleStart(const Menu::Action_t action) {
   if (action == Menu::actionDisplay) {
     startZeroCrossTicks = zeroCrossTicks;
-    currentState = rampToSoak;
-    gotHeadline = false;
+
+    Serial.println("start cycle");
+
     menuExit(action);
+    currentState = RampToSoak;
+    gotHeadline = false;
   }
+}
+
+// ----------------------------------------------------------------------------
+
+bool fanSettings(const Menu::Action_t action) {
 }
 
 // ----------------------------------------------------------------------------
@@ -561,8 +561,9 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
 
   if (previousItems[pos].mi == mi 
       && previousItems[pos].pos == pos 
-      && previousItems[pos].current == isCurrent) {
-    return;
+      && previousItems[pos].current == isCurrent) 
+  {
+    return; // don't render the same item in the same state twice
   }
 
   tft.setCursor(10, y);
@@ -581,7 +582,7 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
  
   // mark items that have children
   if (Engine.getChild(mi) != &Menu::NullItem) {
-    tft.print(" >   ");
+    tft.print(" \x10   ");
   }
 
   previousItems[pos].mi = mi;
@@ -656,18 +657,11 @@ uint8_t heaterValue;
 
 double airTemp[NUMREADINGS];
 double readingsT1[NUMREADINGS]; // the readings used to make a stable temp rolling average
-double readingsT2[NUMREADINGS];
-
 double runningTotalRampRate;
 double rampRate = 0;
 double rateOfRise = 0;          // the result that is displayed
-
 double totalT1 = 0;             // the running total
-double totalT2 = 0;
-
 double averageT1 = 0;           // the average
-double averageT2 = 0;
-
 uint8_t index = 0;              // the index of the current reading
 
 // ----------------------------------------------------------------------------
@@ -716,6 +710,8 @@ void abortWithError(int error) {
   killRelayPins();
   tft.fillScreen(ST7735_RED);
 
+  tft.setCursor(10,10);
+  tft.setTextSize(2);
   tft.print(error);
 /*
   lcd.clear();
@@ -778,13 +774,14 @@ void displayThermocoupleData(struct tcInput* input) {
 #define ST7735_WHITE   0xFFFF
 */
 
-void updateDisplay() {
+void updateProcessDisplay() {
   uint8_t y = 2;
 
   // header
   tft.setTextColor(ST7735_WHITE, ST7735_BLUE);
   if (!gotHeadline) {
     gotHeadline = true;
+    tft.fillScreen(ST7735_WHITE);
     tft.fillRect(0, 0, ST7735_TFTHEIGHT, menuItemHeight, ST7735_BLUE);
     tft.setCursor(2, y);
     tft.print("Profile ");
@@ -805,8 +802,6 @@ void updateDisplay() {
   // temperature
   tft.setTextSize(2);
   displayThermocoupleData(&A);
-  //tft.print(" ");
-  //displayThermocoupleData(&B);
 
   tft.setTextSize(1);
 
@@ -816,13 +811,14 @@ void updateDisplay() {
   tft.setCursor(80, y);
   tft.setTextColor(ST7735_BLACK, ST7735_GREEN);
   switch (currentState) {
-    case idle:        tft.print("Idle     "); break;
-    case rampToSoak:  tft.print("Ramp     "); break;
-    case soak:        tft.print("Soak     "); break;
-    case rampUp:      tft.print("Ramp Up  "); break;
-    case peak:        tft.print("Peak     "); break;
-    case rampDown:    tft.print("Ramp Down"); break;
-    case coolDown:    tft.print("Cool Down"); break;
+    case Idle:        tft.print("Idle     "); break;
+    case RampToSoak:  tft.print("Ramp     "); break;
+    case Soak:        tft.print("Soak     "); break;
+    case RampUp:      tft.print("Ramp Up  "); break;
+    case Peak:        tft.print("Peak     "); break;
+    case RampDown:    tft.print("Ramp Down"); break;
+    case CoolDown:    tft.print("Cool Down"); break;
+    default: tft.print((uint8_t)currentState); break;
   }
 
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
@@ -834,7 +830,7 @@ void updateDisplay() {
   tft.print("\367C  ");
 
 
-  // draw curves
+  // draw temperature curves
   const uint8_t h = 110;
   const uint8_t w = 150;
   
@@ -844,9 +840,12 @@ void updateDisplay() {
   dx = (elapsed * pxPerS) / 10;
 
   uint8_t pxPerC = 30;
+
+  // setpoint
   dy = ((Setpoint * 10) * pxPerC) / 1000;
   dy = h - dy;
   tft.drawPixel(dx, dy, ST7735_BLUE);
+
 /*
   Serial.print(elapsed);
   Serial.print("=");
@@ -890,7 +889,6 @@ void setup() {
   setupRelayPins();
 
   A.chipSelect = THERMOCOUPLE1_CS;
-  B.chipSelect = THERMOCOUPLE2_CS;
 
   tft.initR(INITR_REDTAB);
   tft.setTextWrap(false);
@@ -928,7 +926,7 @@ void setup() {
   // SPE - Enables the SPI when 1
   // DORD - Sends data least Significant Bit First when 1, most Significant Bit first when 0
   // MSTR - Sets the Arduino in master mode when 1, slave mode when 0
-  // CPOL - Sets the data clock to be idle when high if set to 1, idle when low if set to 0
+  // CPOL - Sets the data clock to be Idle when high if set to 1, Idle when low if set to 0
   // CPHA - Samples data on the falling edge of the data clock when 1, rising edge when 0'
   // SPR1 and SPR0 - Sets the SPI speed, 00 is fastest (4MHz) 11 is slowest (250KHz)
 
@@ -945,7 +943,6 @@ void setup() {
   PID.SetMode(AUTOMATIC);
 
   readThermocouple(&A);
-
   if (A.stat != 0) {
     abortWithError(3);
   }
@@ -992,7 +989,7 @@ void setup() {
   //engine = new Menu::Engine(&Menu::NullItem);
   //engine = new Menu::Engine(&miCycleStart);
   menuExit(Menu::actionDisplay); // reset to initial state
-  systemState = State::Settings;
+  currentState = Settings;
   updateMenu = true;
 }
 
@@ -1013,10 +1010,10 @@ uint32_t lastFakeZXTick = 0;
 void loop(void)
 {
   // FIXME - fake zx ticks
-  if (timerTicks > lastFakeZXTick + 100) {
+  if (timerTicks > lastFakeZXTick + 50) {
       lastFakeZXTick = timerTicks;
 //      zeroCrossTicks++;
-      zeroCrossTicks += 50;
+      zeroCrossTicks+=50;
   }
 
   // handle encoder
@@ -1025,7 +1022,7 @@ void loop(void)
   if (encMovement) {
     encAbsolute += encMovement;
 
-    if (systemState == State::Settings) {
+    if (currentState == Settings) {
       Engine.navigate((encMovement > 0) ? Engine.getNext() : Engine.getPrev());
       updateMenu = true;
     }
@@ -1035,79 +1032,64 @@ void loop(void)
   //
   switch (Encoder.getButton()) {
     case ClickEncoder::Clicked:
-      if (systemState != State::Default) {
-        Engine.invoke();
+      if (currentState != Idle) {
         updateMenu = true;
+        Engine.invoke();
       }
       break;
 
     case ClickEncoder::DoubleClicked:
-      if (systemState != State::Default) {
+      if (currentState != Idle) {
         Engine.navigate(Engine.getParent());
         updateMenu = true;
       }
       break;
 
     case ClickEncoder::Held:
-      if (systemState != State::Settings) { // enter settings menu
+      if (currentState != Settings) { // enter settings menu // FIXME not always good
         tft.fillScreen(ST7735_WHITE);
         tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
         Engine.navigate(&miCycleStart);
 
-        systemState = State::Settings;
-        previousSystemState = systemState;
+        currentState = Settings;
         updateMenu = true;
       } 
       break;
   }
 
-/* FIXME: add abort logic to general button handler
-    // handle stop
-    switch(Encoder.getButton()) {
-      case ClickEncoder::Clicked:
-      case ClickEncoder::DoubleClicked:
-        if (currentState == coolDown) {
-          currentState = idle;
-        } 
-        else if (currentState != idle) {
-          currentState = coolDown;
-        }
-        break;
-    }
-*/
-
-  // update menu while in edit mode
-  if (systemState == State::Edit) {
+  // update current menu item while in edit mode
+  if (currentState == Edit) {
     if (Engine.currentItem != &Menu::NullItem) {
       Engine.executeCallbackAction(Menu::actionDisplay);      
     }
+  }
+
+  if (updateMenu) {
+    updateMenu = false;
+    Serial.print("update menu, prev state: ");
+    Serial.println(previousState);
+    
+    if (!encMovement && currentState != Edit) { // clear menu on child/parent navigation
+      tft.fillScreen(ST7735_WHITE);
+    }
+    Engine.render(renderMenuItem, menuItemsVisible);
   }
 
   if (zeroCrossTicks - lastUpdate >= 10) {
     lastUpdate = zeroCrossTicks;
 
     readThermocouple(&A);
-    //readThermocouple(&B);
-
     if (A.stat != 0) {
       abortWithError(3);
     }
   
     // rolling average of the temp T1 and T2
-    totalT1 -= readingsT1[index]; // subtract the last reading
-    //totalT2 -= readingsT2[index];
-
+    totalT1 -= readingsT1[index];       // subtract the last reading
     readingsT1[index] = A.temperature;
-    //readingsT2[index] = (B.stat == 0) ? B.temperature : 0;
-
-    totalT1 += readingsT1[index]; // add the reading to the total
-    //totalT2 += readingsT2[index]; 
-    
-    index = (index + 1) % NUMREADINGS; // next position
-
+    totalT1 += readingsT1[index];       // add the reading to the total
+    index = (index + 1) % NUMREADINGS;  // next position
     averageT1 = totalT1 / NUMREADINGS;  // calculate the average temp
-    //averageT2 = totalT2 / NUMREADINGS;
 
     // need to keep track of a few past readings in order to work out rate of rise
     for (int i = 1; i < NUMREADINGS; i++) { // iterate over all previous entries, moving them backwards one index
@@ -1118,98 +1100,66 @@ void loop(void)
 
     // calculate rate of rise in degrees per polling cycle time/ num readings
     rampRate = (airTemp[NUMREADINGS - 1] - airTemp[0]); // subtract earliest reading from the current one
-
     Input = airTemp[NUMREADINGS - 1]; // update the variable the PID reads
+
 
     // display update
     if (zeroCrossTicks - lastDisplayUpdate > 25) {
       lastDisplayUpdate = zeroCrossTicks;
-      if (currentState != idle) {
-        updateDisplay();
+      if (currentState != Idle && currentState != Settings && currentState != Edit) {
+        updateProcessDisplay();
       }
     }
 
-#if WITH_SERIAL
-    if (zeroCrossTicks - lastSerialOutput > 25) {
-      lastSerialOutput = zeroCrossTicks;
-
-      if (currentState == idle) {
-        Serial.print("0,0,0,0,0,"); 
-        Serial.print(averageT1); 
-        Serial.print(",");
-        if (B.stat == 0) { // only print the second C data if the input is valid
-          Serial.print(averageT2); 
-        } 
-        else {
-          Serial.print("999"); 
-        }
-        Serial.println();
-      } 
-      else {
-        Serial.print((zeroCrossTicks - startZeroCrossTicks) / 100);
-        Serial.print(",");
-        Serial.print((int)currentState);
-        Serial.print(",");
-        Serial.print(Setpoint); 
-        Serial.print(",");
-        Serial.print(heaterValue); 
-        Serial.print(",");
-        Serial.print(fanValue); 
-        Serial.print(",");
-        Serial.print(averageT1); 
-        Serial.print(",");
-        if (B.stat == 0) { // only print the second C data if the input is valid
-          Serial.print(averageT2); 
-        }
-        else {
-          Serial.print("999"); 
-        }
-        Serial.println();
-      }
-    }
-#endif
+    #if WITH_SERIAL
+    #endif
 
     // if the state has changed, set the flags and update the time of state change
-    if (currentState != lastState) {
-      lastState = currentState;
+    if (currentState != previousState) {
+      Serial.print("State change: ");
+      Serial.print(previousState);
+      Serial.print(" to ");
+      Serial.print(currentState);
+      Serial.print(" at ");
+
+      previousState = currentState;
       stateChanged = true;
       stateChangedTicks = zeroCrossTicks;
+
+      Serial.println(stateChangedTicks);
     }
 
     switch (currentState) {
-      case idle:
-        break;
-
-      case rampToSoak:
+      case RampToSoak:
         if (stateChanged) {
+          stateChanged = false;
           PID.SetMode(MANUAL);
           Output = 50;
           PID.SetMode(AUTOMATIC);
           PID.SetControllerDirection(DIRECT);
           PID.SetTunings(Kp, Ki, Kd);
           Setpoint = airTemp[NUMREADINGS - 1];
-          stateChanged = false;
         }
 
         Setpoint += (activeProfile.rampUpRate / 10); // target set ramp up rate
 
-        if (Setpoint >= activeProfile.soakTemp - 1) {
-          currentState = soak;
+        if (Setpoint >= activeProfile.SoakTemp - 1) {
+          currentState = Soak;
         }
         break;
 
-      case soak:
+      case Soak:
         if (stateChanged) {
-          Setpoint = activeProfile.soakTemp;
           stateChanged = false;
+          Setpoint = activeProfile.SoakTemp;
         }
 
-        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.soakDuration * 100) {
-          currentState = rampUp;
+        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.SoakDuration * 100) {
+          currentState = RampUp;
         }
         break;
 
-      case rampUp:
+      case RampUp:
         if (stateChanged) {
           stateChanged = false;
         }
@@ -1218,45 +1168,47 @@ void loop(void)
 
         if (Setpoint >= activeProfile.peakTemp - 1) { // seems to take arodun 8 degrees rise to tail off to 0 rise
           Setpoint = activeProfile.peakTemp;
-          currentState = peak;
+          currentState = Peak;
         }
         break;
 
-      case peak:
+      case Peak:
         if (stateChanged) {
           Setpoint = activeProfile.peakTemp;
           stateChanged = false;
         }
 
         if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.peakDuration * 100) {
-          currentState = rampDown;
+          currentState = RampDown;
         }
         break;
 
-      case rampDown:
+      case RampDown:
         if (stateChanged) {
+          stateChanged = false;
           PID.SetControllerDirection(REVERSE);
           PID.SetTunings(fanKp, fanKi, fanKd);
-          stateChanged = false;
           Setpoint = activeProfile.peakTemp - 15; // get it all going with a bit of a kick! v sluggish here otherwise, too hot too long
         }
 
         Setpoint -= (activeProfile.rampDownRate / 10); 
 
         if (Setpoint <= idleTemp) {
-          currentState = coolDown;
+          currentState = CoolDown;
           //PID.SetControllerDirection(DIRECT); // flip the PID the right way up again
         }
         break;
 
-      case coolDown:
+      case CoolDown:
         if (stateChanged) {
+          stateChanged = false;
           PID.SetControllerDirection(REVERSE);
           PID.SetTunings(fanKp, fanKi, fanKd);
           Setpoint = idleTemp;
         }
+
         if (Input < (idleTemp + 5)) {
-          currentState = idle;
+          currentState = Idle;
           PID.SetMode(MANUAL);
           Output = 0;
         }
@@ -1272,7 +1224,11 @@ void loop(void)
 
   PID.Compute();
 
-  if (currentState != rampDown && currentState != coolDown && currentState != idle) { // decides which control signal is fed to the output for this cycle
+  if (currentState != RampDown 
+      && currentState != CoolDown 
+      && currentState != Idle 
+      && currentState != Settings) 
+  { // decides which control signal is fed to the output for this cycle
     heaterValue = Output;
     fanValue = fanAssistSpeed;
   } 
@@ -1285,14 +1241,6 @@ void loop(void)
 
   double fanTmp = 90.0 / 100.0 * fanValue; // 0-100% -> 0-90° phase control
   Channels[CHANNEL_FAN].target = 90 - (uint8_t)fanTmp;
-
-  if (updateMenu && currentState == idle) {
-    updateMenu = false;
-    if (!encMovement && systemState != State::Edit) { // clear menu on child/parent navigation
-      tft.fillScreen(ST7735_WHITE);
-    }
-    Engine.render(renderMenuItem, menuItemsVisible);
-  }
 }
 
 void saveProfile(unsigned int targetProfile) {
@@ -1304,23 +1252,7 @@ void saveProfile(unsigned int targetProfile) {
   tft.print("Saving profile ");
   tft.print(profileNumber);
 
-#ifdef DEBUG
-  Serial.println("Check parameters:");
-  Serial.print("idleTemp ");
-  Serial.println(idleTemp);
-  Serial.print("ramp Up rate ");
-  Serial.println(activeProfile.rampUpRate);
-  Serial.print("soakTemp ");
-  Serial.println(activeProfile.soakTemp);
-  Serial.print("soakDuration ");
-  Serial.println(activeProfile.soakDuration);
-  Serial.print("peakTemp ");
-  Serial.println(activeProfile.peakTemp);
-  Serial.print("peakDuration ");
-  Serial.println(activeProfile.peakDuration);
-  Serial.print("rampDownRate ");
-  Serial.println(activeProfile.rampDownRate);
-  Serial.println("About to save parameters");
+#ifdef DEBUGS
 #endif
 
   saveParameters(profileNumber); // profileNumber is modified by the menu code directly, this method is called by a menu action
@@ -1335,46 +1267,12 @@ void loadProfile(unsigned int targetProfile) {
   tft.print("Loading profile ");
   tft.print(targetProfile);
 
-#ifdef DEBUG
-  Serial.println("current parameters:");
-  Serial.print("idleTemp ");
-  Serial.println(idleTemp);
-  Serial.print("ramp Up rate ");
-  Serial.println(activeProfile.rampUpRate);
-  Serial.print("soakTemp ");
-  Serial.println(activeProfile.soakTemp);
-  Serial.print("soakDuration ");
-  Serial.println(activeProfile.soakDuration);
-  Serial.print("peakTemp ");
-  Serial.println(activeProfile.peakTemp);
-  Serial.print("peakDuration ");
-  Serial.println(activeProfile.peakDuration);
-  Serial.print("rampDownRate ");
-  Serial.println(activeProfile.rampDownRate);
-  Serial.println("About to load parameters");
+#ifdef DEBUGS
 #endif
 
   bool ok = loadParameters(targetProfile);
 
-#ifdef DEBUG
-  Serial.println("loaded parameters:");
-  Serial.print("idleTemp ");
-  Serial.println(idleTemp);
-  Serial.print("ramp Up rate ");
-  Serial.println(activeProfile.rampUpRate);
-  Serial.print("soakTemp ");
-  Serial.println(activeProfile.soakTemp);
-  Serial.print("soakDuration ");
-  Serial.println(activeProfile.soakDuration);
-  Serial.print("peakTemp ");
-  Serial.println(activeProfile.peakTemp);
-  Serial.print("peakDuration ");
-  Serial.println(activeProfile.peakDuration);
-  Serial.print("rampDownRate ");
-  Serial.println(activeProfile.rampDownRate);
-  Serial.print("checksum ");
-  Serial.println(activeProfile.checksum);
-  Serial.println("after loading parameters");
+#ifdef DEBUGS
 #endif
 
   if (!ok) {
@@ -1432,8 +1330,8 @@ bool firstRun() {
 }
 
 void makeDefaultProfile(void) {
-  activeProfile.soakTemp     = 130;
-  activeProfile.soakDuration =  80;
+  activeProfile.SoakTemp     = 130;
+  activeProfile.SoakDuration =  80;
   activeProfile.peakTemp     = 220;
   activeProfile.peakDuration =  40;
   activeProfile.rampUpRate   =   0.80;
