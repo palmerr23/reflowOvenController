@@ -2,3 +2,6 @@
 	path = libraries/ClickEncoder
 	url = git@github.com:0xPIT/encoder.git
 	branch = arduino
+[submodule "libraries/Menu"]
+	path = libraries/Menu
+	url = git@github.com:0xPIT/menu.git
