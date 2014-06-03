@@ -2577,6 +2577,9 @@ Source: http://eshop.phoenixcontact.com .. 1729128.pdf</description>
 <wire x1="55.245" y1="5.08" x2="49.53" y2="5.08" width="0.4064" layer="1"/>
 <wire x1="49.53" y1="5.08" x2="48.26" y2="6.35" width="0.4064" layer="1"/>
 </signal>
+<signal name="MOSI">
+<contactref element="A1" pad="P$14"/>
+</signal>
 </signals>
 <errors>
 <approved hash="9,1,6262627d2f6f2f70"/>

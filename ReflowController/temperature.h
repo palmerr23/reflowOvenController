@@ -21,6 +21,8 @@ char spi_transfer(volatile char data) {
 
 void readThermocouple(struct tcInput* input) {
   
+  return;
+  
   digitalWrite(input->chipSelect, LOW);
   //Serial.print("active tc ");
   //Serial.println(input->chipSelect);
