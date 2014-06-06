@@ -10,20 +10,10 @@ typedef struct Thermocouple {
   int chipSelect;
 };
 
-/*
-char spi_transfer(volatile char data) {
-  SPDR = data; // Start the transmission
-  while (!(SPSR & (1<<SPIF))) // Wait the end of the transmission
-  {
-    ;
-  }
-
-  return SPDR; // return the received byte
-}
-*/
-
 void readThermocouple(struct Thermocouple* input) {
-  return;
+  #define LCD_CS   7
+  uint8_t lcdState = digitalRead(LCD_CS);
+  digitalWrite(LCD_CS, HIGH);
 
   digitalWrite(input->chipSelect, LOW);
 
@@ -32,20 +22,19 @@ void readThermocouple(struct Thermocouple* input) {
   char data = 0; // dummy data to write
   
   for (int i = 0; i < 4; i++) { // read the 32 data bits from the MAX31855
-    //reply = spi_transfer(data);
     reply = SPI.transfer(data);
     result = result << 8;
     result |= reply;
   }
   
   result >>= 18;
-  
-  uint16_t value = 0xFFF & result; // mask off the sign bit and shit to the correct alignment for the temp data
-  
+
+  uint16_t value = 0xFFF & result; // mask off the sign bit and shit to the correct alignment for the temp data    
   input->stat = reply & B111;  
   input->temperature = value * 0.25;
-  
+
   digitalWrite(input->chipSelect, HIGH);
+  digitalWrite(LCD_CS, lcdState);
 }
 
 #endif
