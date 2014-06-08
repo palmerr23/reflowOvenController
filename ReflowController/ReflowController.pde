@@ -58,84 +58,6 @@ volatile uint8_t  phaseCounter   = 0;
 char buf[15]; // generic char buffer
 
 // ----------------------------------------------------------------------------
-// Ensure that Solid State Relais are off when starting
-//
-void setupRelayPins(void) {
-  DDRD  |= (1 << 2) | (1 << 3); // output
-  PORTD &= ~((1 << 2) | (1 << 3));
-}
-
-void killRelayPins(void) {
-  Timer1.stop();
-  detachInterrupt(INT_ZX);
-  PORTD |= (1 << 2) | (1 << 3);
-}
-
-// ----------------------------------------------------------------------------
-// wave packet control: only turn the solid state relais on for a percentage 
-// of complete sinusoids (i.e. 1x 360°)
-
-#define CHANNELS       2
-#define CHANNEL_HEATER 0
-#define CHANNEL_FAN    1
-
-typedef struct Channel_s {
-  volatile uint8_t target; // percentage of on-time
-  uint8_t state;           // current state counter
-  int32_t next;            // when the next change in output shall occur  
-  bool action;             // hi/lo active
-  uint8_t pin;             // io pin of solid state relais
-} Channel_t;
-
-Channel_t Channels[CHANNELS] = {
-  // heater
-  { 0, 0, 0, false, 2 }, // PD2 == RX == Arduino Pin 0
-  // fan
-  { 0, 0, 0, false, 3 }  // PD3 == TX == Arduino Pin 1
-};
-
-// delay to align relay activation with the actual zero crossing
-uint16_t zxLoopDelay = 0;
-
-// calibrate zero crossing: how many timerIsr happen within one zero crossing
-#define zxCalibrationLoops 25
-struct {
-  volatile uint8_t iterations;
-  volatile uint8_t measure[zxCalibrationLoops];
-} zxLoopCalibration = {
-  zxCalibrationLoops, {}
-};
-
-// Zero Crossing ISR; per ZX, process one channel per interrupt only
-// NB: use native port IO instead of digitalWrite for better performance
-void zeroCrossingIsr(void) {
-  static uint8_t ch = 0;
-
-  // reset phase control timer
-  phaseCounter = 0;
-  TCNT1 = 0;
-
-  zeroCrossTicks++;
-
-  // calculate wave packet parameters
-  Channels[ch].state += Channels[ch].target;
-  if (Channels[ch].state >= 100) {
-    Channels[ch].state -= 100;
-    Channels[ch].action = false;
-  }
-  else {
-    Channels[ch].action = true;
-  }
-  Channels[ch].next = timerTicks + zxLoopDelay;
-
-  ch = ((ch + 1) % CHANNELS); // next channel
-
-  if (zxLoopCalibration.iterations) {
-    zxLoopCalibration.iterations--;
-  }
-}
-
-// ----------------------------------------------------------------------------
 
 // data type for the values used in the reflow profile
 typedef struct profileValues_s {
@@ -321,21 +243,28 @@ void getItemValuePointer(const Menu::Item_t *mi, double **d, int16_t **i) {
 
 // ----------------------------------------------------------------------------
 
+bool isPidSetting(const Menu::Item_t *mi) {
+  return mi == &miPidSettingP || mi == &miPidSettingI || mi == &miPidSettingD;
+}
+
+bool isRampSetting(const Menu::Item_t *mi) {
+  return mi == &miRampUpRate || mi == &miRampDnRate;
+}
+
+// ----------------------------------------------------------------------------
+
 bool getItemValueLabel(const Menu::Item_t *mi, char *label) {
   int16_t *iValue = NULL;
   double  *dValue = NULL;
   char *p;
-  bool isPidSetting = mi == &miPidSettingP || mi == &miPidSettingI || mi == &miPidSettingD;
-  bool isRampSetting = mi == &miRampUpRate || mi == &miRampDnRate;
-
+  
   getItemValuePointer(mi, &dValue, &iValue);
 
-  if (isRampSetting || isPidSetting) {
+  if (isRampSetting(mi) || isPidSetting(mi)) {
     p = label;
-    //*p++ = ' ';
     ftoa(p, *dValue, (isPidSetting) ? 2 : 1); // need greater precision with pid values
 
-    if (isRampSetting) {
+    if (isRampSetting(mi)) {
       while(*p != 0x00) p++;
       *p++ = 0xf7; *p++ = 'C'; *p++ = '/'; *p++ = 's';
       *p = '\0';
@@ -361,14 +290,10 @@ bool getItemValueLabel(const Menu::Item_t *mi, char *label) {
 bool editNumericalValue(const Menu::Action_t action) {
   int16_t *iValue = NULL;
   double  *dValue = NULL;
-  bool isPidSetting = Engine.currentItem == &miPidSettingP || Engine.currentItem == &miPidSettingI || Engine.currentItem == &miPidSettingD;
-  bool isRampSetting = Engine.currentItem == &miRampUpRate || Engine.currentItem == &miRampDnRate;
-
+ 
   if (action == Menu::actionDisplay) {
     bool initial = currentState != Edit;
     currentState = Edit;
-
-    getItemValuePointer(Engine.currentItem, &dValue, &iValue);
 
     if (initial) {
       tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
@@ -394,7 +319,9 @@ bool editNumericalValue(const Menu::Action_t action) {
 
     tft.setTextColor(ST7735_WHITE, ST7735_RED);
 
-    if (isRampSetting || isPidSetting) {
+    getItemValuePointer(Engine.currentItem, &dValue, &iValue);
+
+    if (isRampSetting(Engine.currentItem) || isPidSetting(Engine.currentItem)) {
       double tmp;
       double factor = (isPidSetting) ? 100 : 10;
       
@@ -412,7 +339,6 @@ bool editNumericalValue(const Menu::Action_t action) {
     else {
       if (initial) encAbsolute = *iValue;
       else *iValue = encAbsolute;
-
     }
 
     getItemValueLabel(Engine.currentItem, buf);
@@ -420,15 +346,14 @@ bool editNumericalValue(const Menu::Action_t action) {
     tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
   }
 
-  if (action == Menu::actionTrigger) {  // click on already active item
+  if (action == Menu::actionParent || action == Menu::actionTrigger) {
     clearLastMenuItemRenderState();
-    Engine.navigate(Engine.getParent());
-    return false;
-  }
+    menuUpdateRequest = true;
+    Engine.lastInvokedItem = &Menu::NullItem;
 
-  if (action == Menu::actionParent) {
+
     if (currentState == Edit) { // leave edit mode, return to menu
-      if (isPidSetting) {
+      if (isPidSetting(Engine.currentItem)) {
         savePID();
       }
       else if (Engine.currentItem == &miFanSettings) {
@@ -438,10 +363,10 @@ bool editNumericalValue(const Menu::Action_t action) {
 
       Encoder.setAccelerationEnabled(encLastAccelerationState);
       currentState = Settings;
+
       return false;
     }
-    clearLastMenuItemRenderState();
-    menuUpdateRequest = true;
+
     return true;
   }
 }
@@ -614,10 +539,88 @@ double averageT1 = 0;           // the average
 uint8_t index = 0;              // the index of the current reading
 
 // ----------------------------------------------------------------------------
+// Ensure that Solid State Relais are off when starting
+//
+void setupRelayPins(void) {
+  DDRD  |= (1 << 2) | (1 << 3); // output
+  PORTD &= ~((1 << 2) | (1 << 3));
+}
+
+void killRelayPins(void) {
+  Timer1.stop();
+  detachInterrupt(INT_ZX);
+  PORTD |= (1 << 2) | (1 << 3);
+}
+
+// ----------------------------------------------------------------------------
+// wave packet control: only turn the solid state relais on for a percentage 
+// of complete sinusoids (i.e. 1x 360°)
+
+#define CHANNELS       2
+#define CHANNEL_HEATER 0
+#define CHANNEL_FAN    1
+
+typedef struct Channel_s {
+  volatile uint8_t target; // percentage of on-time
+  uint8_t state;           // current state counter
+  int32_t next;            // when the next change in output shall occur  
+  bool action;             // hi/lo active
+  uint8_t pin;             // io pin of solid state relais
+} Channel_t;
+
+Channel_t Channels[CHANNELS] = {
+  // heater
+  { 0, 0, 0, false, 2 }, // PD2 == RX == Arduino Pin 0
+  // fan
+  { 0, 0, 0, false, 3 }  // PD3 == TX == Arduino Pin 1
+};
+
+// delay to align relay activation with the actual zero crossing
+uint16_t zxLoopDelay = 0;
+
+// calibrate zero crossing: how many timerIsr happen within one zero crossing
+#define zxCalibrationLoops 25
+struct {
+  volatile uint8_t iterations;
+  volatile uint8_t measure[zxCalibrationLoops];
+} zxLoopCalibration = {
+  zxCalibrationLoops, {}
+};
+
+// ----------------------------------------------------------------------------
+// Zero Crossing ISR; per ZX, process one channel per interrupt only
+// NB: use native port IO instead of digitalWrite for better performance
+void zeroCrossingIsr(void) {
+  static uint8_t ch = 0;
+
+  // reset phase control timer
+  phaseCounter = 0;
+  TCNT1 = 0;
+
+  zeroCrossTicks++;
+
+  // calculate wave packet parameters
+  Channels[ch].state += Channels[ch].target;
+  if (Channels[ch].state >= 100) {
+    Channels[ch].state -= 100;
+    Channels[ch].action = false;
+  }
+  else {
+    Channels[ch].action = true;
+  }
+  Channels[ch].next = timerTicks + zxLoopDelay;
+
+  ch = ((ch + 1) % CHANNELS); // next channel
+
+  if (zxLoopCalibration.iterations) {
+    zxLoopCalibration.iterations--;
+  }
+}
+
+// ----------------------------------------------------------------------------
 // timer interrupt handling
 
-// ticks with 100µS
-void timerIsr(void) {
+void timerIsr(void) { // ticks with 100µS
   static uint32_t lastTicks = 0;
 
   // phase control for the fan 
@@ -1037,7 +1040,7 @@ void loop(void)
   //
   if (menuUpdateRequest) {
     menuUpdateRequest = false;
-    if (currentState < UIMenuEnd && !encMovement && currentState != Edit) { // clear menu on child/parent navigation
+    if (currentState < UIMenuEnd && !encMovement && currentState != Edit && previousState != Edit) { // clear menu on child/parent navigation
       tft.fillScreen(ST7735_WHITE);
     }  
     Engine.render(renderMenuItem, menuItemsVisible);

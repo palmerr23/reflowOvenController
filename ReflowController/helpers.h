@@ -134,7 +134,6 @@ char *ftoa(char *buf, float val, int places) {
 
 void itostr(char *r, int16_t val, char *unit = NULL) {
   char *p = r, *u = unit;
-  //*p++ = ' ';
   itoa10(val, p);
   while(*p != 0x00) p++;
   while(*u != 0x00) *p++ = *u++;
