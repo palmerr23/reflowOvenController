@@ -98,7 +98,7 @@ uint8_t countDigits(uint32_t n) {
 
 // ----------------------------------------------------------------------------
 
-char *ftoa(char *buf, float val, int places) {
+void ftoa(char *buf, float val, int places) {
   if (signbit(val)) *buf++ = '-';
 
   int32_t digit = (int32_t)(val);
@@ -125,9 +125,8 @@ char *ftoa(char *buf, float val, int places) {
   itoa10(labs(decimal), buf);
   if (decimal == 0) {
     while (places--) *buf++ = '0';
+    *buf = '\0';
   }
-
-  return buf;
 }
 
 // ----------------------------------------------------------------------------
@@ -137,7 +136,7 @@ void itostr(char *r, int16_t val, char *unit = NULL) {
   itoa10(val, p);
   while(*p != 0x00) p++;
   while(*u != 0x00) *p++ = *u++;
-  *p = 0x00;
+  *p = '\0';
 }
 
 // ---------------------------------------------------------------------------- 
