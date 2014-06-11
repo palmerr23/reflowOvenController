@@ -4,6 +4,9 @@
 // (c) 2012-2013 Ed Simmons
 // ----------------------------------------------------------------------------
 
+//#define FAKE_HW 1
+//#define PIDTUNE 1 // autotune wouldn't fit in the 28k available on my arduino pro micro.
+
 #include <avr/eeprom.h>
 #include <EEPROM.h>
 #include <PID_v1.h>
@@ -12,14 +15,15 @@
 #include <SPI.h>
 #include <Menu.h>
 #include <TimerOne.h>
-#include <TimerThree.h>
 #include <ClickEncoder.h>
 #include "temperature.h"
 #include "helpers.h"
-
-//#include "fixedpoint.h"
-//using namespace Fp;
-
+#ifdef FAKE_HW
+#include <TimerThree.h>
+#endif
+#ifdef PIDTUNE
+#include <PID_AutoTune_v0.h>
+#endif
 // ----------------------------------------------------------------------------
 
 const char * ver = "3.0";
@@ -27,14 +31,12 @@ const char * ver = "3.0";
 // ----------------------------------------------------------------------------
 // Hardware Configuration 
 
-//#define FAKE_HW 1
-
 // 1.8" TFT via SPI -> breadboard
 #ifdef FAKE_HW
 #define LCD_CS  10
 #define LCD_DC   7
 #define LCD_RST  8
-#else
+#else 
 // 1.8 TFT test handsoldered on v0 pcb
 #define LCD_CS   7
 #define LCD_DC   8
@@ -71,8 +73,6 @@ typedef struct profileValues_s {
   int16_t peakDuration;
   double  rampUpRate;
   double  rampDownRate;
-  //Fp32f<8>  rampUpRate;
-  //Fp32f<8>  rampDownRate;
   uint8_t checksum;
 } Profile_t;
 
@@ -83,12 +83,12 @@ int idleTemp = 50; // the temperature at which to consider the oven safe to leav
 int fanAssistSpeed = 33; // default fan speed
 
 const uint8_t maxProfiles = 30;
+
 // EEPROM offsets
 const uint16_t offsetFanSpeed   = maxProfiles * sizeof(Profile_t) + 1; // one byte
 const uint16_t offsetProfileNum = maxProfiles * sizeof(Profile_t) + 2; // one byte
 const uint16_t offsetPidConfig  = maxProfiles * sizeof(Profile_t) + 3; // sizeof(PID_t)
 
-boolean thermocoupleOneActive = true; // this is used to keep track of which thermocouple input is used for control
 Thermocouple A;
 
 // ----------------------------------------------------------------------------
@@ -96,7 +96,6 @@ Thermocouple A;
 uint32_t startZeroCrossTicks;
 uint32_t lastUpdate = 0;
 uint32_t lastDisplayUpdate = 0;
-uint32_t lastSerialOutput = 0;
 
 // ----------------------------------------------------------------------------
 // UI
@@ -104,17 +103,6 @@ uint32_t lastSerialOutput = 0;
 // NB: Adafruit GFX ASCII-Table is bogous: https://github.com/adafruit/Adafruit-GFX-Library/issues/22
 //
 Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
-
-/*
-#define ST7735_BLACK   0x0000
-#define ST7735_BLUE    0x001F
-#define ST7735_RED     0xF800
-#define ST7735_GREEN   0x07E0
-#define ST7735_CYAN    0x07FF
-#define ST7735_MAGENTA 0xF81F
-#define ST7735_YELLOW  0xFFE0  
-#define ST7735_WHITE   0xFFFF
-*/
 
 #ifdef FAKE_HW
 ClickEncoder Encoder(A0, A1, A2, 2);
@@ -151,7 +139,9 @@ typedef enum {
   RampDown,
   CoolDown,
 
-  Complete = 20
+  Complete = 20,
+
+  Tune = 30
 } State;
 
 State currentState  = Idle;
@@ -190,6 +180,9 @@ extern const Menu::Item_t miRampUpRate, miRampDnRate, miSoakTime,
 // ----------------------------------------------------------------------------
 // PID
 
+uint8_t fanValue;
+uint8_t heaterValue;
+
 double Setpoint;
 double Input;
 double Output;
@@ -205,8 +198,15 @@ PID_t fanPID    = { 1.00, 0.03, 10.00 };
 
 PID PID(&Input, &Output, &Setpoint, heaterPID.Kp, heaterPID.Ki, heaterPID.Kd, DIRECT);
 
-uint8_t fanValue;
-uint8_t heaterValue;
+#ifdef PIDTUNE
+PID_ATune PIDTune(&Input, &Output);
+
+double aTuneStep       =  50,
+       aTuneNoise      =   1,
+       aTuneStartValue =  50; // is set to Output, i.e. 0-100% of Heater
+
+unsigned int aTuneLookBack = 30;
+#endif
 
 // ----------------------------------------------------------------------------
 
@@ -375,6 +375,7 @@ bool editNumericalValue(const Menu::Action_t action) {
 // ----------------------------------------------------------------------------
 
 bool factoryReset(const Menu::Action_t action) {
+#ifndef PIDTUNE
   if (action == Menu::actionDisplay) {
     bool initial = currentState != Edit;
     currentState = Edit;
@@ -402,6 +403,7 @@ bool factoryReset(const Menu::Action_t action) {
       return false;
     }
   }
+#endif // PIDTUNE
 }
 
 // ----------------------------------------------------------------------------
@@ -411,6 +413,7 @@ void saveProfile(unsigned int targetProfile, bool quiet = false);
 // ----------------------------------------------------------------------------
 
 bool saveLoadProfile(const Menu::Action_t action) {
+#ifndef PIDTUNE
   bool isLoad = Engine.currentItem == &miLoadProfile;
 
   if (action == Menu::actionDisplay) {
@@ -449,15 +452,23 @@ bool saveLoadProfile(const Menu::Action_t action) {
       return false;
     }
   }
+#endif // PIDTUNE
 }
 
 // ----------------------------------------------------------------------------
+
+void toggleAutoTune();
 
 bool cycleStart(const Menu::Action_t action) {
   if (action == Menu::actionDisplay) {
     startZeroCrossTicks = zeroCrossTicks;
     menuExit(action);
+
+#ifndef PIDTUNE    
     currentState = RampToSoak;
+#else
+    toggleAutoTune();
+#endif
     initialProcessDisplay = false;
     menuUpdateRequest = false;
   }
@@ -509,7 +520,11 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
 
 MenuItem(miExit, "", Menu::NullItem, Menu::NullItem, Menu::NullItem, miCycleStart, menuExit);
 
+#ifndef PIDTUNE
 MenuItem(miCycleStart,  "Start Cycle",  miEditProfile, Menu::NullItem, miExit, Menu::NullItem, cycleStart);
+#else
+MenuItem(miCycleStart,  "Start Autotune",  miEditProfile, Menu::NullItem, miExit, Menu::NullItem, cycleStart);
+#endif
 MenuItem(miEditProfile, "Edit Profile", miLoadProfile, miCycleStart,   miExit, miRampUpRate, menuDummy);
   MenuItem(miRampUpRate, "Ramp up  ",   miSoakTemp,      Menu::NullItem, miEditProfile, Menu::NullItem, editNumericalValue);
   MenuItem(miSoakTemp,   "Soak temp", miSoakTime,      miRampUpRate,   miEditProfile, Menu::NullItem, editNumericalValue);
@@ -714,32 +729,39 @@ void alignRightPrefix(uint16_t v) {
   if (v < 1e1) tft.print(' ');
 }
 
-uint16_t pxPerS, pxPerC;  // TODO use activeProfile.peakTemp + 20%
-uint16_t xOffset; // for wraparound on x axis
-  
+uint16_t pxPerS;
+uint16_t pxPerC;
+uint16_t xOffset; // used for wraparound on x axis
+
 void updateProcessDisplay() {
   const uint8_t h =  86;
   const uint8_t w = 160;
-  uint8_t yOffset =  30; // space not available for graph
+  const uint8_t yOffset =  30; // space not available for graph  
+
   uint16_t dx, dy;
   uint8_t y = 2;
   double tmp;
 
   // header & initial view
   tft.setTextColor(ST7735_WHITE, ST7735_BLUE);
+
   if (!initialProcessDisplay) {
     initialProcessDisplay = true;
 
     tft.fillScreen(ST7735_WHITE);
     tft.fillRect(0, 0, tft.width(), menuItemHeight, ST7735_BLUE);
     tft.setCursor(2, y);
+#ifndef PIDTUNE
     tft.print("Profile ");
     tft.print(activeProfileId);
+#else
+    tft.print("Tuning ");
+#endif
 
     tmp = h / (activeProfile.peakTemp * 1.10) * 100.0;
     pxPerC = (uint16_t)tmp;
     
-#if 0 // FIXME
+#if 0 // FIXME pxPerS should be calculated from the selected profile
     double estimatedTotalTime = 60 * 12;
     // estimate total run time for current profile
     estimatedTotalTime = activeProfile.soakDuration + activeProfile.peakDuration;
@@ -750,7 +772,7 @@ void updateProcessDisplay() {
     Serial.print("total est. time: ");
     Serial.println((uint16_t)estimatedTotalTime);
 #endif
-    tmp = 60 * 8; // FIXME should be calculated from the selected profile
+    tmp = 60 * 8;
     tmp = w / tmp * 10.0; 
     pxPerS = (uint16_t)tmp;
 
@@ -786,6 +808,7 @@ void updateProcessDisplay() {
   displayThermocoupleData(&A);
   tft.setTextSize(1);
 
+#ifndef PIDTUNE
   // current state
   y -= 2;
   tft.setCursor(95, y);
@@ -805,6 +828,7 @@ void updateProcessDisplay() {
   tft.print("        "); // lazy: fill up space
 
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
+#endif
 
   // set point
   y += 10;
@@ -856,29 +880,25 @@ void updateProcessDisplay() {
   tft.print((int)heaterValue);
   tft.print('%');
 
-  //tft.setCursor(40, y);
   tft.print(" \x2a");
   alignRightPrefix((int)fanValue); 
   tft.print((int)fanValue);
   tft.print('%');
 
-  //tft.setCursor(80, y);
-  tft.print(" \x12"); // R -> Delta oder \x7f
-  alignRightPrefix((int)rampRate); 
+  tft.print(" \x12 "); // R -> Delta oder \x7f
   printDouble(rampRate);
-  tft.print("\367C/s   ");
+  tft.print("\367C/s    ");
 }
 
 // ----------------------------------------------------------------------------
 
 void setup() {
-  Serial.begin(57600);
+  //Serial.begin(57600);
 
   setupRelayPins();
 
 #ifdef FAKE_HW
-  tft.initR(INITR_REDTAB);
-  //tft.initR(INITR_GREENTAB);
+  tft.initR(INITR_REDTAB); // INITR_GREENTAB;
 #else
   tft.initR(INITR_BLACKTAB);
 #endif
@@ -905,7 +925,9 @@ void setup() {
   A.chipSelect = THERMOCOUPLE1_CS;
   digitalWrite(A.chipSelect, HIGH);
   pinMode(A.chipSelect, OUTPUT);
+#ifndef FAKE_HW
   readThermocouple(&A);
+#endif
   if (A.stat != 0) {
     abortWithError(3);
   }
@@ -913,13 +935,11 @@ void setup() {
   // initialize moving average filter
   runningTotalRampRate = A.temperature * NUMREADINGS;
   for(int i = 0; i < NUMREADINGS; i++) {
-    //airTemp[i] = A.temperature;
     airTemp[i].temp = A.temperature;
   }
 
   Timer1.initialize(100);
   Timer1.attachInterrupt(timerIsr);
-
 
 #ifndef FAKE_HW
   pinMode(PIN_ZX, INPUT_PULLUP);
@@ -930,10 +950,11 @@ void setup() {
   Timer3.attachInterrupt(zeroCrossingIsr);
 #endif
 
-#ifdef WITH_SPASH
-// splash screen
   tft.fillScreen(ST7735_WHITE);
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
+
+#ifdef WITH_SPASH
+  // splash screen
   tft.setCursor(10, 30);
   tft.setTextSize(2);
   tft.print("Reflow");
@@ -942,9 +963,9 @@ void setup() {
   tft.setTextSize(1);
   tft.setCursor(52, 67);
   tft.print("v"); tft.print(ver);
-#ifdef FAKE_HW
+  #ifdef FAKE_HW
   tft.print("-fake");
-#endif
+  #endif
   tft.setCursor(7, 119);
   tft.print("(c)2014 karl@pitrich.com");
   delay(1000);
@@ -954,7 +975,7 @@ void setup() {
   tft.setCursor(7, 99);  
   tft.print("Calibrating... ");
   delay(400);
-
+#ifndef PIDTUNE
   while (zxLoopDelay == 0) {
     if (zxLoopCalibration.iterations < 1) {
       for (uint8_t l = 0; l < zxCalibrationLoops; l++) {
@@ -964,7 +985,9 @@ void setup() {
       zxLoopDelay -= 6; // calibration offset: loop runtime
     }
   }
-
+#else
+  zxLoopDelay = 90;
+#endif
   tft.print(zxLoopDelay);
   delay(1500);
 #endif
@@ -999,21 +1022,30 @@ void updateRampSetpoint(bool down = false) {
 
 // ----------------------------------------------------------------------------
 
+#ifdef PIDTUNE
+//int8_t previousPIDMode;
 
-#define PID_KP_PREHEAT 40 
-#define PID_KI_PREHEAT 0.025 
-#define PID_KD_PREHEAT 20 
+void toggleAutoTune() {
+ if(currentState != Tune) { //Set the output to the desired starting frequency.
+    currentState = Tune;
 
-#define PID_KP_SOAK 200
-#define PID_KI_SOAK 0.015 
-#define PID_KD_SOAK 50 
+    Output = aTuneStartValue;
+    PIDTune.SetNoiseBand(aTuneNoise);
+    PIDTune.SetOutputStep(aTuneStep);
+    PIDTune.SetLookbackSec((int)aTuneLookBack);
 
-#define PID_KP_REFLOW 100 
-#define PID_KI_REFLOW 0.025 
-#define PID_KD_REFLOW 25 
+    //previousPIDMode = PID.GetMode();
+  }
+  else { //cancel autotune
+    PIDTune.Cancel();
+    currentState = Idle;
+    //PID.SetMode(previousPIDMode);
+    currentState = CoolDown;
+  }
+}
+#endif // PIDTUNE
 
 // ----------------------------------------------------------------------------
-
 
 void loop(void) 
 {
@@ -1057,7 +1089,7 @@ void loop(void)
         }
       }
       break;
-
+#if 0
     case ClickEncoder::Held:
       if (currentState < UIMenuEnd) { // enter settings menu // FIXME not always good
         tft.fillScreen(ST7735_WHITE);
@@ -1068,6 +1100,7 @@ void loop(void)
         menuUpdateRequest = true;
       } 
       break;
+#endif
   }
 
   // --------------------------------------------------------------------------
@@ -1106,7 +1139,12 @@ void loop(void)
     lastUpdate = zeroCrossTicks;
 
     // should be sufficient to read it every 250ms or 500ms ?
+#ifndef FAKE_HW
     readThermocouple(&A);
+#else
+    A.temperature = encAbsolute;
+#endif
+
     if (A.stat != 0) {
       abortWithError(3);
     }
@@ -1134,7 +1172,6 @@ void loop(void)
     }
     rampRate = (airTemp[NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * 100;
 
-
     Input = airTemp[NUMREADINGS - 1].temp; // update the variable the PID reads
 
     // display update
@@ -1146,23 +1183,22 @@ void loop(void)
     }
 
     switch (currentState) {
-      case RampToSoak: {
-          if (stateChanged) {
-            lastRampTicks = zeroCrossTicks;
-            stateChanged = false;
-            PID.SetMode(MANUAL);
-            Output = 80;
-            PID.SetMode(AUTOMATIC);
-            PID.SetControllerDirection(DIRECT);
-            PID.SetTunings(heaterPID.Kp, heaterPID.Ki, heaterPID.Kd);
-            Setpoint = airTemp[NUMREADINGS - 1].temp;
-          }
+#ifndef PIDTUNE
+      case RampToSoak:
+        if (stateChanged) {
+          lastRampTicks = zeroCrossTicks;
+          stateChanged = false;
+          Output = 80;
+          PID.SetMode(AUTOMATIC);
+          PID.SetControllerDirection(DIRECT);
+          PID.SetTunings(heaterPID.Kp, heaterPID.Ki, heaterPID.Kd);
+          Setpoint = airTemp[NUMREADINGS - 1].temp;
+        }
 
-          updateRampSetpoint();
+        updateRampSetpoint();
 
-          if (Setpoint >= activeProfile.soakTemp - 1) {
-            currentState = Soak;
-          }
+        if (Setpoint >= activeProfile.soakTemp - 1) {
+          currentState = Soak;
         }
         break;
 
@@ -1217,7 +1253,7 @@ void loop(void)
           currentState = CoolDown;
         }
         break;
-
+#endif
       case CoolDown:
         if (stateChanged) {
           stateChanged = false;
@@ -1231,6 +1267,45 @@ void loop(void)
           PID.SetMode(MANUAL);
           Output = 0;
         }
+
+#ifdef PIDTUNE
+      case Tune:
+        {
+          Setpoint = 210.0;
+
+          byte val = PIDTune.Runtime();
+          
+          PIDTune.setpoint = 210.0;
+
+          if (val != 0) {
+            currentState = CoolDown;
+          }
+/*
+          tft.setCursor(2, 40);
+                            tft.print((int32_t)PIDTune.absMin * 100);
+          tft.print("|");   tft.print((int32_t)PIDTune.absMax * 100); 
+          tft.print("|");   tft.print((int32_t)PIDTune.refVal * 100);
+          tft.print("|");   tft.print((int32_t)PIDTune.setpoint * 100);
+          tft.print("   ");
+*/
+          if (currentState != Tune) { // we're done, set the tuning parameters
+            heaterPID.Kp = PIDTune.GetKp();
+            heaterPID.Ki = PIDTune.GetKi();
+            heaterPID.Kd = PIDTune.GetKd();
+            
+            savePID();
+
+            tft.setCursor(40, 40);
+            tft.print("Kp: "); tft.print((uint32_t)(heaterPID.Kp * 100));
+            tft.setCursor(40, 52);
+            tft.print("Ki: "); tft.print((uint32_t)(heaterPID.Ki * 100));
+            tft.setCursor(40, 64);
+            tft.print("Kd: "); tft.print((uint32_t)(heaterPID.Kd * 100));
+          
+          }
+        }
+        break;
+#endif
     }
   }
 
@@ -1240,7 +1315,7 @@ void loop(void)
   // both of these errors are blocking and do not exit!
   //if (Setpoint > Input + 50) abortWithError(1); // if we're 50 degree cooler than setpoint, abort
   //if (Input > Setpoint + 50) abortWithError(2); // or 50 degrees hotter, also abort
-
+#ifndef PIDTUNE
   PID.Compute();
 
   // decides which control signal is fed to the output for this cycle
@@ -1259,6 +1334,10 @@ void loop(void)
     heaterValue = 0;
     fanValue = Output;
   }
+#else
+  heaterValue = Output;
+  fanValue = fanAssistSpeed;
+#endif
 
   Channels[CHANNEL_HEATER].target = heaterValue;
 
@@ -1268,6 +1347,7 @@ void loop(void)
 
 
 void saveProfile(unsigned int targetProfile, bool quiet) {
+#ifndef PIDTUNE
   activeProfileId = targetProfile;
 
   if (!quiet) {
@@ -1279,7 +1359,8 @@ void saveProfile(unsigned int targetProfile, bool quiet) {
   }
   saveParameters(activeProfileId); // activeProfileId is modified by the menu code directly, this method is called by a menu action
 
-  if (!quiet) delay(500); 
+  if (!quiet) delay(500);
+#endif
 }
 
 void loadProfile(unsigned int targetProfile) {
@@ -1309,13 +1390,14 @@ void loadProfile(unsigned int targetProfile) {
 }
 
 bool saveParameters(uint8_t profile) {
+#ifndef PIDTUNE
   uint16_t offset = profile * sizeof(Profile_t);
 
   activeProfile.checksum = crc8((uint8_t *)&activeProfile, sizeof(Profile_t) - sizeof(uint8_t));
 
   do {} while (!(eeprom_is_ready()));
   eeprom_write_block(&activeProfile, (void *)offset, sizeof(Profile_t));
-
+#endif
   return true;
 }
 
@@ -1341,6 +1423,7 @@ bool loadPID() {
 }
 
 bool firstRun() { 
+#ifndef PIDTUNE
   // if all bytes of a profile in the middle of the eeprom space are 255, we assume it's a first run
   unsigned int offset = 15 * sizeof(Profile_t);
 
@@ -1349,7 +1432,7 @@ bool firstRun() {
       return false;
     }
   }
-
+#endif
   return true;
 }
 
@@ -1363,6 +1446,7 @@ void makeDefaultProfile(void) {
 }
 
 void factoryReset() {
+#ifndef PIDTUNE
   makeDefaultProfile();
 
   tft.fillScreen(ST7735_RED);
@@ -1381,15 +1465,37 @@ void factoryReset() {
   // https://controls.engin.umich.edu/wiki/index.php/PIDDownsides
   // http://sts.bwk.tue.nl/7y500/readers/.%5CInstellingenRegelaars_ExtraStof.pdf
   // http://coralux.net/wp-content/uploads/2013/08/reflow_oven_03.png
-  heaterPID.Kp =  5.00; 
+/*
+#define PID_KP_PREHEAT 40 
+#define PID_KI_PREHEAT 0.025 
+#define PID_KD_PREHEAT 20 
+
+#define PID_KP_SOAK 200
+#define PID_KI_SOAK 0.015 
+#define PID_KD_SOAK 50 
+
+#define PID_KP_REFLOW 100 
+#define PID_KI_REFLOW 0.025 
+#define PID_KD_REFLOW 25
+*/
+// 4.00, 0.05,  2.00
+// 5.00, 0.01, 20.00
+
+// Results of Autotune a 1350W Oven
+// Setpoint 100°C -> Kp: 1.01, Ki: 0.01, Kd: 19.71
+// Setpoint 175°C -> Kp: 0.52, Ki: 0.01, Kd:  6.45
+// Setpoint 210°C -> Kp: 0.43, Ki: 0.01, Kd: 12.57
+
+  heaterPID.Kp =  0.60; 
   heaterPID.Ki =  0.01;
-  heaterPID.Kd = 30.00;
+  heaterPID.Kd = 19.70;
   savePID();
 
   activeProfileId = 0;
   saveLastUsedProfile();
 
   delay(500);
+#endif
 }
 
 void saveFanSpeed() {
