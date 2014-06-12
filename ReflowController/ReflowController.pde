@@ -6,6 +6,7 @@
 
 //#define FAKE_HW 1
 //#define PIDTUNE 1 // autotune wouldn't fit in the 28k available on my arduino pro micro.
+//#define WITH_SPLASH 1
 
 #include <avr/eeprom.h>
 #include <EEPROM.h>
@@ -838,9 +839,9 @@ void updateProcessDisplay() {
   printDouble(Setpoint);
   tft.print("\367C  ");
 
-
   // draw temperature curves
   //
+
   if (xOffset >= elapsed) {
     xOffset = 0;
   }
@@ -852,23 +853,13 @@ void updateProcessDisplay() {
     }
   } while(dx > w);
 
-#ifdef GRAPH_VERBOSE
-  Serial.print(elapsed); Serial.print("="); Serial.print(dx); Serial.print(", ");
-#endif
-
   // temperature setpoint
   dy = h - ((uint16_t)Setpoint * pxPerC / 100) + yOffset;
   tft.drawPixel(dx, dy, ST7735_BLUE);
-#ifdef GRAPH_VERBOSE
-  Serial.print((uint16_t)Setpoint); Serial.print("="); Serial.print(dy); Serial.print(",");
-#endif
 
   // actual temperature
   dy = h - ((uint16_t)A.temperature * pxPerC / 100) + yOffset;
   tft.drawPixel(dx, dy, ST7735_RED);
-#ifdef GRAPH_VERBOSE
-  Serial.print((uint16_t)A.temperature); Serial.print("="); Serial.println(dy);
-#endif
 
   // bottom line
   y = 119;
@@ -885,7 +876,7 @@ void updateProcessDisplay() {
   tft.print((int)fanValue);
   tft.print('%');
 
-  tft.print(" \x12 "); // R -> Delta oder \x7f
+  tft.print(" \x12 "); // alternative: \x7f
   printDouble(rampRate);
   tft.print("\367C/s    ");
 }
@@ -953,7 +944,7 @@ void setup() {
   tft.fillScreen(ST7735_WHITE);
   tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
-#ifdef WITH_SPASH
+#ifdef WITH_SPLASH
   // splash screen
   tft.setCursor(10, 30);
   tft.setTextSize(2);
@@ -986,7 +977,7 @@ void setup() {
     }
   }
 #else
-  zxLoopDelay = 90;
+  zxLoopDelay = 90; // calibration did not fit in flash...
 #endif
   tft.print(zxLoopDelay);
   delay(1500);
@@ -1023,8 +1014,6 @@ void updateRampSetpoint(bool down = false) {
 // ----------------------------------------------------------------------------
 
 #ifdef PIDTUNE
-//int8_t previousPIDMode;
-
 void toggleAutoTune() {
  if(currentState != Tune) { //Set the output to the desired starting frequency.
     currentState = Tune;
@@ -1033,13 +1022,9 @@ void toggleAutoTune() {
     PIDTune.SetNoiseBand(aTuneNoise);
     PIDTune.SetOutputStep(aTuneStep);
     PIDTune.SetLookbackSec((int)aTuneLookBack);
-
-    //previousPIDMode = PID.GetMode();
   }
   else { //cancel autotune
     PIDTune.Cancel();
-    currentState = Idle;
-    //PID.SetMode(previousPIDMode);
     currentState = CoolDown;
   }
 }
@@ -1138,9 +1123,8 @@ void loop(void)
     uint32_t deltaT = zeroCrossTicks - lastUpdate;
     lastUpdate = zeroCrossTicks;
 
-    // should be sufficient to read it every 250ms or 500ms ?
 #ifndef FAKE_HW
-    readThermocouple(&A);
+    readThermocouple(&A); // should be sufficient to read it every 250ms or 500ms
 #else
     A.temperature = encAbsolute;
 #endif
@@ -1163,11 +1147,11 @@ void loop(void)
     }
 
     airTemp[NUMREADINGS - 1].temp = averageT1; // update the last index with the newest average
-    airTemp[NUMREADINGS - 1].ticks = deltaT; // update the last index with the newest average
+    airTemp[NUMREADINGS - 1].ticks = deltaT;
 
-    // calculate rate of rise in degrees per polling cycle time/ num readings
+    // calculate rate temperature change
     uint32_t collectTicks;
-    for (int i = 1; i < NUMREADINGS; i++) {
+    for (int i = 0; i < NUMREADINGS; i++) {
       collectTicks += airTemp[i].ticks;
     }
     rampRate = (airTemp[NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * 100;
@@ -1272,22 +1256,13 @@ void loop(void)
       case Tune:
         {
           Setpoint = 210.0;
-
           byte val = PIDTune.Runtime();
-          
           PIDTune.setpoint = 210.0;
 
           if (val != 0) {
             currentState = CoolDown;
           }
-/*
-          tft.setCursor(2, 40);
-                            tft.print((int32_t)PIDTune.absMin * 100);
-          tft.print("|");   tft.print((int32_t)PIDTune.absMax * 100); 
-          tft.print("|");   tft.print((int32_t)PIDTune.refVal * 100);
-          tft.print("|");   tft.print((int32_t)PIDTune.setpoint * 100);
-          tft.print("   ");
-*/
+
           if (currentState != Tune) { // we're done, set the tuning parameters
             heaterPID.Kp = PIDTune.GetKp();
             heaterPID.Ki = PIDTune.GetKi();
@@ -1301,7 +1276,6 @@ void loop(void)
             tft.print("Ki: "); tft.print((uint32_t)(heaterPID.Ki * 100));
             tft.setCursor(40, 64);
             tft.print("Kd: "); tft.print((uint32_t)(heaterPID.Kd * 100));
-          
           }
         }
         break;
@@ -1315,6 +1289,7 @@ void loop(void)
   // both of these errors are blocking and do not exit!
   //if (Setpoint > Input + 50) abortWithError(1); // if we're 50 degree cooler than setpoint, abort
   //if (Input > Setpoint + 50) abortWithError(2); // or 50 degrees hotter, also abort
+  
 #ifndef PIDTUNE
   PID.Compute();
 
