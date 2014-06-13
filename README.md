@@ -41,18 +41,18 @@ Screenshots and usage information
 ========
 
 ![CycleWithOverflow]
-*Display after a cylcle has been completed. The graph wraps around automatically. 'Sp' is the current setpoint for te PID loop. In the lower line there are current heater and fan output, both in %, and the current temperature rise or drop rate. The graph will draw orientation lines every 50°C up to the peak temperature set in the selected profile.*
+*Display after a cylcle has been completed. The blue line is the setpoint, the red line the actual temperature measured by the thermocouple. Note that the graph wraps around automatically. 'Sp' is the current setpoint calculated by the PID loop. In the lower line there are: Current heater and fan outputs, both in percent, and the current temperature rise or drop rate in °C per second. The graph will draw orientation lines every 50°C up to the peak temperature set in the selected profile.*
 
 ![Menu]
-*The main menu can be navigated by rotating the encoder. Click enters the menu item or navigates to the submenu. Doubleclick moves up or back or exits the menu item.* 
+*The main menu can be navigated by rotating the encoder (sic!). Clicking enters the menu item, or navigates to the submenu. Doubleclick moves up or back or exits the menu item.*
 
 ![FanSpeedEdit]
-*To edit a setting, click once to enter edit mode, rotate to change the value, click again to save. Doubleclick exits without saving.*
+*To edit a setting, click once to enter edit mode (red cursor), rotate to change the value, click again to save. Doubleclick will exit without saving.*
 
 ![MenuEditProfile]
 
 ![ProfileSettings]
-*These are typical profile settings.*
+*These are typical profile settings...*
 
 ![ProfileSettingsEdit]
 *They can be easily edited using the encoder like described above.*
@@ -64,7 +64,7 @@ Screenshots and usage information
 *My current pid values for my 1300W toaster oven.*
 
 ![PIDValuesEdit]
-*Edit is simple, note that, unlike with the profile settings, the PID values will be stored to EEPROM when you exit.*
+*Edit is simple, like above. Note that, unlike with the profile settings, the PID values will be stored to EEPROM when you exit.*
 
 
 Obtaining the source code
