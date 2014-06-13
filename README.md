@@ -39,14 +39,14 @@ The hardware can be found in the [folder hardware], including the Eagle schemati
 
 From my manufacturing run, I have some spare PCBs. You can contact me to get some (€15,- + p&p each).
 
-The board contains the [Arduino Pro Micro], very simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks. The current software uses only one of the thermocouples, so you need to populate one IC only. If you're lucky, you can get free samples of the MAX81855 from Maxim.
+The board contains the [Arduino Pro Micro], very simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks. The current software uses only one of the thermocouples, so you need to populate one IC only. If you're lucky, you can get free samples of the MAX31855 from Maxim.
 
 
-The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control in order to minimize RF interference and load on the relay. For the fan motor, phase control has been implemented.
+The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control in order to minimize RF interference and load on the relay. For the fan motor, [Phase Fired] control has been implemented.
 
-Please note that all important timings are *based on the mains frequency*, so the circuit will **not work** properly without mains connection. 
+Please note that all important timings are *based on the mains frequency*, so the circuit will **not work** properly without mains connection.
 
-For testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. Please note that everything is tuned to 50Hz mains, if you live in a retro-country 60Hz mains (and probably even imperial units), you need to adjust the source so that the timings fit.
+But for testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. Please note that everything is tuned to 50Hz mains, if you live in a retro-country with 60Hz mains (and probably even imperial units!), you need to adjust the source so that the timings fit.
 
 Screenshots and usage information
 ========
@@ -58,24 +58,24 @@ Screenshots and usage information
 *The main menu can be navigated by rotating the encoder (sic!). Clicking enters the menu item, or navigates to the submenu. Doubleclick moves up or back or exits the menu item.*
 
 ![FanSpeedEdit]
-*To edit a setting, click once to enter edit mode (red cursor), rotate to change the value, click again to save. Doubleclick will exit without saving.*
+*To edit a setting, click once to enter edit mode (red cursor), then rotate to change the value, click again to save. Doubleclick will exit without saving.*
 
 ![MenuEditProfile]
 
 ![ProfileSettings]
-*These are typical profile settings...*
+*These are typical solder profile settings...*
 
 ![ProfileSettingsEdit]
-*They can be easily edited using the encoder like described above.*
+*These parameters can be easily edited using the encoder as described above.*
 
 ![MenuLoadProfile]
-*Profiles can be loaded and saved. You have to do this manually, so that you can have 'save-as' functionality without overwriting existing profiles.* 
+*Up to 30 Profiles can be loaded and saved. You have to do this manually, so that you can have 'save-as' functionality without overwriting existing profiles.*
 
 ![PIDValues]
-*My current pid values for my 1300W toaster oven.*
+*These are the current pid values for my 1300W 20$ toaster oven.*
 
 ![PIDValuesEdit]
-*Edit is simple, like above. Note that, unlike with the profile settings, the PID values will be stored to EEPROM when you exit.*
+*Editing is simple, like above. Note that, unlike with the profile settings, the PID values will be automatically stored to EEPROM when you exit the submenu by doubleclicking.*
 
 
 Obtaining the source code
@@ -97,33 +97,36 @@ to fetch all involved libraries. (See: [Submodule Cheat Sheet])
 Installation
 ====================
 
-Of course, you need to have the Arduino IDE installed. I've worked with version 1.5.x only and I will not support older versions. Get it from the [Arduino Download] page.
+Of course, you need to have the Arduino IDE installed. I've worked with version 1.5.x only and I will not support older versions. Get it from the [Arduino Download] page or upgrade you current Arduino setup.
 
 There as several dependencies you need to install. 
 
 If you are unfamiliar with Arduino Libraries, please read [the library guide].
-Basically, the Library needs to be liked or copied into your Arduino library folder.
+Basically, each library needs to be liked or copied into your Arduino library folder.
 
 On a Mac, this is how you link the submodule libraries to your Arduino libraries folder:
 
     cd ~/Documents/Arduino/Libraries
     ln -s ~/Development/<reflow source code>/libraries
     
-My code uses [TimerOne] for basic timing, for the 1.8" TFT [Adafruit_ST7735], which requires [Adafruit_GFX]. I **strongly suggest** to use my *modified version* of [Adafruit_GFX-pit], as it **performs much better**, but requires you to use SPI.
+My code uses [TimerOne] for basic timing, for the 1.8" TFT I've used [Adafruit_ST7735], which requires [Adafruit_GFX]. I **strongly suggest** to use my **modified version** of [Adafruit_GFX-pit], as it **performs much better**, but requires you to use SPI, which my board does anyway.
 
-Also, for the user interface, you require my own [Menu] and [ClickEncoder] libraries, which are included as submodules.
+For the user interface you require my own [Menu] and [ClickEncoder] libraries, which are included as submodules.
 
 All other libraries need to be downloaded and installed.
 
 After you've installed all libraries, open the Arduino IDE, open the ReflowController.pde sketch (using File->Open).
 
-Select the right kind of hardware from the Tools->Board menu.
+Select the right hardware from the Tools->Board menu. (Use Leonardo for the Pro Micro)
 
-Compile the firmware (Sketch->Verify) to test everything is installed correctly. Choose the correct serial port from Tools->Serial Port and then upload the code.
+Compile the firmware (Sketch->Verify) to test everything is installed correctly. If something's wrong, feel free to post an issue here on github, I will look into it.
 
-I could not fit PID Autotuning into the limited space of the Arduino in addition the normal code. So if you want to try it, install the  [PID_AutoTune] Library,  `#define PIDTUNE 1`, recompile and download do the Arduino.
+Now, choose the correct serial port from Tools->Serial Port and then upload the code.
+*Remember* that a standard compile will get stuck at "Calibrating..." without proper mains connection, so that zero crossing interrupts can occur.
 
-As all timing relies on Zero Crossing detection, you need to `#define FAKE_HW 1` and install [TimerThree] when you want to run without actual hardware *or* without mains connection.
+I could not fit PID Autotuning into the limited space of the Arduino in addition the normal code. So if you want to try to autotune you PID Loop, install the [PID_AutoTune] Library, `#define PIDTUNE 1` in the .ino file, then recompile and download do the Arduino.
+
+As all timing relies on Zero Crossing detection, you need to `#define FAKE_HW 1` and install [TimerThree] when you want to run without actual hardware *and/or* without mains connection.
 
 
 Things to note
@@ -131,10 +134,20 @@ Things to note
 
 * The [MAX31855] does not like the thermocouple being grounded; It must be isolated from ground or earth.
 * The PID Loop must be tuned individually for each oven. It will *not* work out of the box. 
-* [PID Autotune] is not very useful, as it seems to be able to tune only to keep a specific temperature value, which is not what we do with a reflow oven. Also, at least my oven seems to be very non-linear when heating up.
+* [PID Autotune] is not very useful, as it seems to be able to tune only to keep a specific temperature value, which is not what we do in a reflow oven. Also, at least my oven seems to be very non-linear when heating up.
 * When rewiring inside your oven, use only wiring that can withstand high temperatures. I use silicone coated lace.
 * Do not solder wiring inside you oven, the temperature might desolder you joints. **Crimp everything.**
 * Use proper earth ground connection for your ovens chassis.
+
+Ideas and todo
+====================
+* Optimize code size so that more features can fit
+* Clamp values for parameters to reasonalbe ranges
+* Add scrollbar (sample implementation in the demo for [Menu]
+* Separate PID configuration for each process step
+* try to make the display faster, it is very slow
+* Named profiles
+* Rewrite [Menu] so that is uses callback objects instead of spaghetti-callbacks
 
 Licensing
 ====================
