@@ -1,113 +1,192 @@
-reflowOvenController
+Reflow Oven Controller
 ====================
 
-**Reflow Oven Controller with PID Control **
+Arduino-based reflow oven controller with:
+* [PID] loop control
+* [Wave Packet] and [Phase Fired] control for AC outputs
+* graphic TFT LC-Display, drawing the temperature curves
+  * using an [Adafruit 1.8" TFT] or derivate display
+* solely controlled using a rotary encoder and it's one button
+* stores up to 30 temperature profiles in EEPROM
+* configurable PID-parameters
+* simple, small hardware to drive loads up to 600V and up to 8A
+* hardware can
+  * measure two temperatures independently
+  * drive two AC loads, such as heater and fan
 
-* (c) 2013 Ed Simmons <ed@estechnical.co.uk>
-* (c) 2014 Karl Pitrich <karl@pitrich.com>
-
-Suitable for the controler hardware sold by [ESTechnical] or for DIY controllers based on Arduino hardware.
+(c) 2014 Karl Pitrich <karl@pitrich.com>
+based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
 
-Changes
+Introduction
 ====================
-* 2014-05-17: Support for click encoder
-  * The `#define USE_CLICKENCODER 1` in LCDMenu.h selects the use of a rotary encoder with button instead of the buttons in the T962x oven.
-  * Configure the Pins used in `LCDMenu.cpp`
 
-Important
+This Reflow Oven Controller relies on an Arduino Pro Micro, which is similar to the Leonardo and easily obtainable on eb*y for about $6.00, plus my custom shield, which is actually more like a motherboard.
+
+As I believe it is not wise to have a mess of wiring and breakout-boards for operating mains powered equipment, I've decided to design custom board with easily obtainable components.
+
+The hardware can be found in the [folder hardware], including the Eagle schematics and PCB layout files. It should fit the freemioum version of Eagle. Here are preview images:
+![PCB][ImgPCB]
+![Schematic][ImgSCH]
+
+The board contains the Arduino Pro Micro, a simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks.
+
+The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control, in order to minimize RF interference.
+
+Please note that all important timings are *based on the mains frequency*, so the circuit will **not work** properly without mains connection. 
+
+For testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. Please note that everything is tuned to 50Hz mains, if you live in a retro-country 60Hz mains and probably even imperial units, you need to adjust the source to fit.
+
+Screenshots and usage information
+========
+
+![CycleWithOverflow]
+*Display after a cylcle has been completed. The graph wraps around automatically. 'Sp' is the current setpoint for te PID loop. In the lower line there are current heater and fan output, both in %, and the current temperature rise or drop rate. The graph will draw orientation lines every 50°C up to the peak temperature set in the selected profile.*
+
+![Menu]
+*The main menu can be navigated by rotating the encoder. Click enters the menu item or navigates to the submenu. Doubleclick moves up or back or exits the menu item.* 
+
+![FanSpeedEdit]
+*To edit a setting, click once to enter edit mode, rotate to change the value, click again to save. Doubleclick exits without saving.*
+
+![MenuEditProfile]
+
+![ProfileSettings]
+*These are typical profile settings.*
+
+![ProfileSettingsEdit]
+*They can be easily edited using the encoder like described above.*
+
+![MenuLoadProfile]
+*Profiles can be loaded and saved. You have to do this manually, so that you can have 'save-as' functionality without overwriting existing profiles.* 
+
+![PIDValues]
+*My current pid values for my 1300W toaster oven.*
+
+![PIDValuesEdit]
+*Edit is simple, note that, unlike with the profile settings, the PID values will be stored to EEPROM when you exit.*
+
+
+Obtaining the source code
 ====================
 
-After cloning this repository, you need to do 
+Get the code using `git`.
+
+	git clone https://github.com/estechnical/reflowOvenController.git
+
+or [download a Snapshot].
+
+I've added some libraries I've used as submodules to the git repositroy, so it is important that, after cloning this repository, you do 
 
     git submodule update --init
 
 to fetch all involved libraries. (See: [Submodule Cheat Sheet])
 
 
-
-Introduction
-====================
-
-The ESTechnical reflow oven controller was designed to operate the T962, T962A and T962C ovens.
-
-It operates using PID control of the heater and fan output to improve the control compared to the original manufacturer's controller.
-
-ESTechnical sell the controller hardware ready to install on eBay and on the ESTechnical website: http://www.estechnical.co.uk
-
-Thanks go to Toby Wilkinson for his excellent menu codebase - http://tobestool.net/t962-t962a-reflow-oven-controller/
-Thanks are also due to Brett Beauregard for his excellent work on the arduino PID library - http://playground.arduino.cc/Code/PIDLibrary
-
-
-Obtaining the source code
-====================
-
-Use one of the following methods to get the source code:
-
-Using GIT:
-If you are familiar with git and want to use git to check out the source code, use the following command in a terminal:
-(This will check out the source code from git into the current directory. I will cover no further use of git here.)
-
-	git clone https://github.com/estechnical/reflowOvenController.git
-    git submodule update --init
-
-
 Installation
 ====================
 
-To edit/compile the source code for the reflow controller, first install the arduino IDE - http://arduino.cc/en/Main/Software
+Of course, you need to have the Arduino IDE installed. I've worked with version 1.5.x only and I will not support older versions. Get it from the [Arduino Download] page.
 
-**Note:** Tested with Arduino 1.5.x only.
+There as several dependencies you need to install. 
 
-If you use the ESTechnical reflow controller which uses a 20MHz crystal instead of a 16MHz crystal,  special build settings for the arduino IDE are required.
+If you are unfamiliar with Arduino Libraries, please read [the library guide].
+Basically, the Library needs to be liked or copied into your Arduino library folder.
 
-Browse to your arduino installation directory, then browse to hardware/arduino/boards.txt. Edit this file (using, for example Programmer's Notepad http://www.pnotepad.org) and add the following block to the top of the file, taking care to not mess up the layout of the file:
+On a Mac, this is how you link the submodule libraries to your Arduino libraries folder:
 
-	##############################################################
+    cd ~/Documents/Arduino/Libraries
+    ln -s ~/Development/<reflow source code>/libraries
+    
+My code uses [TimerOne] for basic timing, for the 1.8" TFT [Adafruit_ST7735], which requires [Adafruit_GFX]. I **strongly suggest** to use my *modified version* of [Adafruit_GFX-pit], as it **performs much better**, but requires you to use SPI.
 
-	atmega328_20MHz.name=ESTechnical Reflow controller
+Also, for the user interface, you require my own [Menu] and [ClickEncoder] libraries, which are included as submodules.
 
-	atmega328_20MHz.upload.protocol=stk500
-	atmega328_20MHz.upload.maximum_size=30720
-	atmega328_20MHz.upload.speed=57600
+All other libraries need to be downloaded and installed.
 
-	atmega328_20MHz.bootloader.low_fuses=0xFF
-	atmega328_20MHz.bootloader.high_fuses=0xDA
-	atmega328_20MHz.bootloader.extended_fuses=0x05
-	atmega328_20MHz.bootloader.path=atmega
-	atmega328_20MHz.bootloader.file=ATmegaBOOT_168_atmega328.hex
-	atmega328_20MHz.bootloader.unlock_bits=0x3F
-	atmega328_20MHz.bootloader.lock_bits=0x0F
+After you've installed all libraries, open the Arduino IDE, open the ReflowController.pde sketch (using File->Open).
 
-	atmega328_20MHz.build.mcu=atmega328p
-	atmega328_20MHz.build.f_cpu=20000000L
-	atmega328_20MHz.build.core=arduino
-	atmega328_20MHz.build.variant=standard
+Select the right kind of hardware from the Tools->Board menu.
+
+Compile the firmware (Sketch->Verify) to test everything is installed correctly. Choose the correct serial port from Tools->Serial Port and then upload the code.
+
+I could not fit PID Autotuning into the limited space of the Arduino in addition the normal code. So if you want to try it, install the  [PID_AutoTune] Library,  `#define PIDTUNE 1`, recompile and download do the Arduino.
+
+As all timing relies on Zero Crossing detection, you need to `#define FAKE_HW 1` and install [TimerThree] when you want to run without actual hardware *or* without mains connection.
 
 
-	##############################################################
-
-Save the file and quit.
-
-Setting up the source code to build firmware
+Things to note
 ====================
 
-Locate the sketchbook directory that the arduino IDE created when installing, you can see the path to your sketchbook folder in the arduino preferences menu (File-> Preferences).
-
-From the files downloaded and unzipped from github:
-
-Copy the ReflowController directory from the zip file into the Sketchbook directory. 
-
-Copy all the directories in the Libraries directory to the libraries directory in the arduino sketchbook directory.
-
-Open the arduino IDE, open the ReflowController.pde sketch (using File->Open). 
-
-Select the right kind of hardware from the Tools->Board menu. 
-
-Compile the firmware with Ctrl+R to test everything is installed correctly. Choose the right serial port from Tools->Serial Port and then upload the code using Ctrl+U.
+* The [MAX31855] does not like the thermocouple being grounded; It must be isolated from ground or earth.
+* The PID Loop must be tuned individually for each oven. It will *not* work out of the box. 
+* [PID Autotune] is not very useful, as it seems to be able to tune only to keep a specific temperature value, which is not what we do with a reflow oven. Also, at least my oven seems to be very non-linear when heating up.
 
 
 
+Licensing
+====================
+```
+The MIT License (MIT)
+
+Copyright (c) 2014 karl@pitrich.com
+All rights reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```
+
+
+[PID Autotune]:https://github.com/br3ttb/Arduino-PID-AutoTune-Library
 [Submodule Cheat Sheet]:http://blog.jacius.info/git-submodule-cheat-sheet/
 [ESTechnical]:http://www.estechnical.co.uk
+[Arduino Download]:http://arduino.cc/en/Main/Software
+[folder hardware]:https://github.com/0xPIT/reflowOvenController/tree/master/hardware
+[download a Snapshot]:https://github.com/0xPIT/reflowOvenController/archive/master.zip
+[the library guide]:http://arduino.cc/en/Guide/Libraries
+[PID]:http://en.wikipedia.org/wiki/PID_controller
+[Wave Packet]:http://de.wikipedia.org/wiki/Schwingungspaketsteuerung
+[Phase Fired]:http://en.wikipedia.org/wiki/Phase-fired_controllers 
+[Adafruit 1.8" TFT]:http://www.adafruit.com/products/358
+[MAX31855]:http://www.maximintegrated.com/en/products/analog/sensors-and-sensor-interface/MAX31855.html
+[Fischer SK409 50,8]:http://www.pollin.de/shop/dt/NzE5OTY1OTk-
+[Sharp S202S01]:http://sharp-world.com/products/device/lineup/data/pdf/datasheet/s102s01_e.pdf
+[Zero crossing]:http://en.wikipedia.org/wiki/Zero_crossing
+[TimerOne]:http://playground.arduino.cc/Code/Timer1
+[TimerThree]:http://playground.arduino.cc/Code/Timer1
+[Adafruit_ST7735]:https://github.com/adafruit/Adafruit-ST7735-Library
+[Adafruit_GFX]:https://github.com/adafruit/Adafruit-GFX-Library
+[Adafruit_GFX-pit]:https://github.com/0xPIT/Adafruit-ST7735-Library
+[Menu]:https://github.com/0xPIT/menu
+[ClickEncoder]:https://github.com/0xPIT/encoder
 
+
+
+[CycleWithOverflow]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/CycleWithOverflow.jpg
+[FanSpeedEdit]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/FanSpeedEdit.jpg
+[Menu]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Menu.jpg
+[MenuLoadProfile]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/MenuLoadProfile.jpg
+[MenuEditProfile]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/MenuEditProfile.jpg
+[PIDValuesEdit]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/PIDValuesEdit.jpg
+[ProfileSettings]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/ProfileSettings.jpg
+[PIDValues]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/PIDValues.jpg
+[ProfileSettingsEdit]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/ProfileSettingsEdit.jpg
+
+
+[ImgPCB]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.brd.preview.png
+[ImgSCH]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.sch.preview.png
