@@ -37,7 +37,10 @@ The hardware can be found in the [folder hardware], including the Eagle schemati
 ![PCB][ImgPCB]
 ![Schematic][ImgSCH]
 
+From my manufacturing run, I have some spare PCBs. You can contact me to get some (€15,- + p&p each).
+
 The board contains the [Arduino Pro Micro], very simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks. The current software uses only one of the thermocouples, so you need to populate one IC only. If you're lucky, you can get free samples of the MAX81855 from Maxim.
+
 
 The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control in order to minimize RF interference and load on the relay. For the fan motor, phase control has been implemented.
 
