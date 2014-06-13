@@ -6,13 +6,14 @@ Arduino-based reflow oven controller with:
 * [Wave Packet] and [Phase Fired] control for AC outputs
 * graphic TFT LC-Display, drawing the temperature curves
   * using an [Adafruit 1.8" TFT] or derivate display
-* solely controlled using a rotary encoder and it's one button
+* solely controlled using a cheap rotary encoder and it's single button
 * stores up to 30 temperature profiles in EEPROM
 * configurable PID-parameters
 * simple, small hardware to drive loads up to 600V and up to 8A
 * hardware can
   * measure two temperatures independently
   * drive two AC loads, such as heater and fan
+* could also be used for slow coockers
 
 (c) 2014 Karl Pitrich <karl@pitrich.com>
 in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
