@@ -18,17 +18,15 @@ Arduino-based reflow oven controller with:
 (c) 2014 Karl Pitrich <karl@pitrich.com>
 in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
+![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg)
+== Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
+
+
 Post action shot:
 ![CycleWithOverflow]
 
 Introduction
 ====================
-
-<div style="background: red; color: white; font-size: 18px;">
-<br/>
-Warning: Whis project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
-<br/>
-<div>
 
 This Reflow Oven Controller relies on an [Arduino Pro Micro], which is similar to the Leonardo and easily obtainable on eb*y for less than $10, plus my custom shield, which is actually more like a motherboard.
 
