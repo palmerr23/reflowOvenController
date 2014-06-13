@@ -15,27 +15,27 @@ Arduino-based reflow oven controller with:
   * drive two AC loads, such as heater and fan
 
 (c) 2014 Karl Pitrich <karl@pitrich.com>
-based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
+in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
 
 Introduction
 ====================
 
-As I believe it is not wise to have a mess of wiring and tiny breakout-boards for operating mains powered equipment, I've decided to design custom board with easily obtainable components.
-
 This Reflow Oven Controller relies on an [Arduino Pro Micro], which is similar to the Leonardo and easily obtainable on eb*y for less than $10, plus my custom shield, which is actually more like a motherboard.
+
+As I believe it is not wise to have a mess of wiring and tiny breakout-boards for operating mains powered equipment, I've decided to design custom board with easily obtainable components.
 
 The hardware can be found in the [folder hardware], including the Eagle schematics and PCB layout files. It should fit the freemium version of Eagle. Here are preview images:
 ![PCB][ImgPCB]
 ![Schematic][ImgSCH]
 
-The board contains the Arduino Pro Micro, very simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks. The current software uses only one of the thermocouples, so you need to populate one IC only.
+The board contains the [Arduino Pro Micro], very simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks. The current software uses only one of the thermocouples, so you need to populate one IC only.
 
 The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control, in order to minimize RF interference and load on the relay.
 
 Please note that all important timings are *based on the mains frequency*, so the circuit will **not work** properly without mains connection. 
 
-For testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. Please note that everything is tuned to 50Hz mains, if you live in a retro-country 60Hz mains and probably even imperial units, you need to adjust the source to fit.
+For testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. Please note that everything is tuned to 50Hz mains, if you live in a retro-country 60Hz mains (and probably even imperial units), you need to adjust the source so that the timings fit.
 
 Screenshots and usage information
 ========
