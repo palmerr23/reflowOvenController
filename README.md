@@ -18,6 +18,8 @@ Arduino-based reflow oven controller with:
 (c) 2014 Karl Pitrich <karl@pitrich.com>
 in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
+Post action shot:
+![CycleWithOverflow]
 
 Introduction
 ====================
