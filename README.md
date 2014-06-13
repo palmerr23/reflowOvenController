@@ -132,7 +132,9 @@ Things to note
 * The [MAX31855] does not like the thermocouple being grounded; It must be isolated from ground or earth.
 * The PID Loop must be tuned individually for each oven. It will *not* work out of the box. 
 * [PID Autotune] is not very useful, as it seems to be able to tune only to keep a specific temperature value, which is not what we do with a reflow oven. Also, at least my oven seems to be very non-linear when heating up.
-
+* When rewiring inside your oven, use only wiring that can withstand high temperatures. I use silicone coated lace.
+* Do not solder wiring inside you oven, the temperature might desolder you joints. **Crimp everything.**
+* Use proper earth ground connection for your ovens chassis.
 
 Licensing
 ====================
