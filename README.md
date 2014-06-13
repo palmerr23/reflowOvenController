@@ -18,9 +18,9 @@ Arduino-based reflow oven controller with:
 (c) 2014 Karl Pitrich <karl@pitrich.com>
 in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
-![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg)
-
 ## Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
+
+![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg)
 
 
 Post action shot:
