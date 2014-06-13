@@ -21,17 +21,17 @@ based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 Introduction
 ====================
 
-This Reflow Oven Controller relies on an Arduino Pro Micro, which is similar to the Leonardo and easily obtainable on eb*y for about $6.00, plus my custom shield, which is actually more like a motherboard.
+As I believe it is not wise to have a mess of wiring and tiny breakout-boards for operating mains powered equipment, I've decided to design custom board with easily obtainable components.
 
-As I believe it is not wise to have a mess of wiring and breakout-boards for operating mains powered equipment, I've decided to design custom board with easily obtainable components.
+This Reflow Oven Controller relies on an [Arduino Pro Micro], which is similar to the Leonardo and easily obtainable on eb*y for less than $10, plus my custom shield, which is actually more like a motherboard.
 
-The hardware can be found in the [folder hardware], including the Eagle schematics and PCB layout files. It should fit the freemioum version of Eagle. Here are preview images:
+The hardware can be found in the [folder hardware], including the Eagle schematics and PCB layout files. It should fit the freemium version of Eagle. Here are preview images:
 ![PCB][ImgPCB]
 ![Schematic][ImgSCH]
 
-The board contains the Arduino Pro Micro, a simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks.
+The board contains the Arduino Pro Micro, very simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks. The current software uses only one of the thermocouples, so you need to populate one IC only.
 
-The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control, in order to minimize RF interference.
+The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control, in order to minimize RF interference and load on the relay.
 
 Please note that all important timings are *based on the mains frequency*, so the circuit will **not work** properly without mains connection. 
 
@@ -123,7 +123,6 @@ Things to note
 * [PID Autotune] is not very useful, as it seems to be able to tune only to keep a specific temperature value, which is not what we do with a reflow oven. Also, at least my oven seems to be very non-linear when heating up.
 
 
-
 Licensing
 ====================
 ```
@@ -174,7 +173,7 @@ THE SOFTWARE.
 [Adafruit_GFX-pit]:https://github.com/0xPIT/Adafruit-ST7735-Library
 [Menu]:https://github.com/0xPIT/menu
 [ClickEncoder]:https://github.com/0xPIT/encoder
-
+[Arduino Pro Micro]:https://www.sparkfun.com/products/12640
 
 
 [CycleWithOverflow]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/CycleWithOverflow.jpg
