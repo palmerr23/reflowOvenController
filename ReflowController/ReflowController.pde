@@ -30,6 +30,11 @@
 const char * ver = "3.0";
 
 // ----------------------------------------------------------------------------
+
+#define MS_PER_SINE 100       // for 50Hz mains; 100ms per sinusoid
+//#define MS_PER_SINE  83.333 // for 60Hz Mains; 83,3333ms per sinusoid
+
+// ----------------------------------------------------------------------------
 // Hardware Configuration 
 
 // 1.8" TFT via SPI -> breadboard
@@ -55,6 +60,10 @@ const char * ver = "3.0";
                        // Leonardo == Pro Micro:
                        //   Pin: 3 2 0 1 7
                        //   Int: 0 1 2 3 4 
+
+// ----------------------------------------------------------------------------
+
+#define WITH_SPLASH 1
 
 // ----------------------------------------------------------------------------
 
@@ -1004,9 +1013,9 @@ void setup() {
 uint32_t lastRampTicks;
 
 void updateRampSetpoint(bool down = false) {
-  if (zeroCrossTicks > lastRampTicks + 100) {
+  if (zeroCrossTicks > lastRampTicks + MS_PER_SINE) {
     double rate = (down) ? activeProfile.rampDownRate : activeProfile.rampUpRate;
-    Setpoint += (rate / 100 * (zeroCrossTicks - lastRampTicks)) * ((down) ? -1 : 1);
+    Setpoint += (rate / MS_PER_SINE * (zeroCrossTicks - lastRampTicks)) * ((down) ? -1 : 1);
     lastRampTicks = zeroCrossTicks;
   }
 }
@@ -1154,7 +1163,7 @@ void loop(void)
     for (int i = 0; i < NUMREADINGS; i++) {
       collectTicks += airTemp[i].ticks;
     }
-    rampRate = (airTemp[NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * 100;
+    rampRate = (airTemp[NUMREADINGS - 1].temp - airTemp[0].temp) / collectTicks * MS_PER_SINE;
 
     Input = airTemp[NUMREADINGS - 1].temp; // update the variable the PID reads
 
@@ -1192,7 +1201,7 @@ void loop(void)
           Setpoint = activeProfile.soakTemp;
         }
 
-        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.soakDuration * 100) {
+        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.soakDuration * MS_PER_SINE) {
           currentState = RampUp;
         }
         break;
@@ -1217,7 +1226,7 @@ void loop(void)
           Setpoint = activeProfile.peakTemp;
         }
 
-        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.peakDuration * 100) {
+        if (zeroCrossTicks - stateChangedTicks >= (uint32_t)activeProfile.peakDuration * MS_PER_SINE) {
           currentState = RampDown;
         }
         break;
