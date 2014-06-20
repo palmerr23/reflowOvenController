@@ -46,7 +46,7 @@ The software uses [PID] control of the heater and fan output for improved temper
 
 Please note that all important timings are *based on the mains frequency*, so the circuit will **not work** properly without mains connection.
 
-But for testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. Please note that everything is tuned to 50Hz mains, if you live in a retro-country with 60Hz mains (and probably even imperial units!), you need to adjust the source so that the timings fit.
+But for testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. The software should work in 50 and 60Hz mains, the 60Hz version is not tested, though.
 
 Screenshots and usage information
 ========
