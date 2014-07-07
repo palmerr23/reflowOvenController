@@ -2392,7 +2392,11 @@ Source: http://eshop.phoenixcontact.com .. 1729128.pdf</description>
 <wire x1="5.055" y1="13.3139" x2="15.1939" y2="3.175" width="2.1844" layer="16"/>
 <wire x1="15.1939" y1="3.175" x2="20.32" y2="3.175" width="2.1844" layer="16"/>
 <wire x1="5.055" y1="33.6339" x2="5.055" y2="28.5539" width="2.1844" layer="16"/>
-<wire x1="5.055" y1="13.3139" x2="5.055" y2="28.5539" width="0" layer="19" extent="1-1"/>
+<wire x1="5.055" y1="13.3139" x2="6.9639" y2="13.3139" width="2.1844" layer="1"/>
+<wire x1="6.9639" y1="13.3139" x2="10.16" y2="16.51" width="2.1844" layer="1"/>
+<wire x1="10.16" y1="16.51" x2="10.16" y2="25.4" width="2.1844" layer="1"/>
+<wire x1="5.055" y1="28.5539" x2="7.0061" y2="28.5539" width="2.1844" layer="1"/>
+<wire x1="7.0061" y1="28.5539" x2="10.16" y2="25.4" width="2.1844" layer="1"/>
 </signal>
 <signal name="N$9">
 <contactref element="R5" pad="2"/>
