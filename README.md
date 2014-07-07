@@ -18,6 +18,9 @@ Arduino-based reflow oven controller with:
 (c) 2014 Karl Pitrich <karl@pitrich.com>
 in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
+*Some excess PCBs will be available on Tindie starting from 2014-07-10:*
+<a href="https://www.tindie.com/stores/0xPIT/?ref=offsite_badges&utm_source=sellers_0xPIT&utm_medium=badges&utm_campaign=badge_small"><img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-smalls.png" alt="I sell on Tindie"width="200" height="55"></a>
+
 ## Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
 
 ![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg)
