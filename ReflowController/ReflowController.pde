@@ -44,9 +44,9 @@ const char * ver = "3.0";
 #define LCD_RST  8
 #else 
 // 1.8 TFT test handsoldered on v0 pcb
-#define LCD_CS   7
-#define LCD_DC   8
-#define LCD_RST  9
+#define LCD_CS   10
+#define LCD_DC   9
+#define LCD_RST  8
 #endif
 
 // Thermocouple via SPI
@@ -905,7 +905,7 @@ void setup() {
 
   tft.setTextWrap(false);
   tft.setTextSize(1);
-  tft.setRotation(3);
+  tft.setRotation(1);
 
   if (firstRun()) {
     factoryReset();
