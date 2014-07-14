@@ -61,7 +61,7 @@ const char * ver = "3.0";
 
 // ----------------------------------------------------------------------------
 
-//#define WITH_SPLASH 1
+#define WITH_SPLASH 1
 
 // ----------------------------------------------------------------------------
 
@@ -608,7 +608,7 @@ Channel_t Channels[CHANNELS] = {
 uint16_t zxLoopDelay = 0;
 
 // calibrate zero crossing: how many timerIsr happen within one zero crossing
-#define zxCalibrationLoops 25
+#define zxCalibrationLoops 32
 struct {
   volatile int8_t iterations;
   volatile uint8_t measure[zxCalibrationLoops];
@@ -979,13 +979,12 @@ void setup() {
   tft.print("Calibrating... ");
   delay(400);
 #ifndef PIDTUNE
-  // TODO: should be optimized so that the tick timer starts at first zx
   while (zxLoopDelay == 0) {
     if (zxLoopCalibration.iterations == 0) { // average tick measurements, dump 1st value
       for (int8_t l = 0; l < zxCalibrationLoops; l++) {
         zxLoopDelay += zxLoopCalibration.measure[l];
       }
-      zxLoopDelay /= (zxCalibrationLoops - 1);
+      zxLoopDelay >>= 5; // / 32
     }
   }
 #else
@@ -1045,6 +1044,9 @@ void toggleAutoTune() {
 // ----------------------------------------------------------------------------
 
 uint8_t thermocoupleErrorCount;
+#define TC_ERROR_TOLERANCE 5 // allow for n consecutive errors due to noisy power supply before bailing out
+
+// ----------------------------------------------------------------------------
 
 void loop(void) 
 {
@@ -1138,16 +1140,16 @@ void loop(void)
       thermocoupleErrorCount = 0;
     }
 
-    if (thermocoupleErrorCount > 5) { // bail out after 5 consecutive tc errors
+    if (thermocoupleErrorCount > TC_ERROR_TOLERANCE) {
       abortWithError(A.stat);
     }
 
-/// debug
+#if 0 // verbose thermocouple error bits
     tft.setCursor(10, 40);
     for (uint8_t mask = B111; mask; mask >>= 1) {
       tft.print(mask & A.stat ? '1' : '0');
     }
-/// debug
+#endif
   
     // rolling average of the temp T1 and T2
     totalT1 -= readingsT1[index];       // subtract the last reading
@@ -1165,7 +1167,7 @@ void loop(void)
     airTemp[NUMREADINGS - 1].temp = averageT1; // update the last index with the newest average
     airTemp[NUMREADINGS - 1].ticks = deltaT;
 
-    // calculate rate temperature change
+    // calculate rate of temperature change
     uint32_t collectTicks;
     for (int i = 0; i < NUMREADINGS; i++) {
       collectTicks += airTemp[i].ticks;
@@ -1336,17 +1338,21 @@ void loop(void)
   Channels[CHANNEL_FAN].target = 90 - (uint8_t)fanTmp;
 }
 
+void memoryFeedbackScreen(uint8_t profileId, bool loading) {
+  tft.fillScreen(ST7735_GREEN);
+  tft.setTextColor(ST7735_BLACK);
+  tft.setCursor(10, 50);
+  tft.print(loading ? "Loading" : "Saving");
+  tft.print(" profile ");
+  tft.print(profileId);  
+}
 
 void saveProfile(unsigned int targetProfile, bool quiet) {
 #ifndef PIDTUNE
   activeProfileId = targetProfile;
 
   if (!quiet) {
-    tft.fillScreen(ST7735_GREEN);
-    tft.setTextColor(ST7735_BLACK);
-    tft.setCursor(10, 50);
-    tft.print("Saving profile ");
-    tft.print(activeProfileId);
+    memoryFeedbackScreen(activeProfileId, false);
   }
   saveParameters(activeProfileId); // activeProfileId is modified by the menu code directly, this method is called by a menu action
 
@@ -1355,12 +1361,7 @@ void saveProfile(unsigned int targetProfile, bool quiet) {
 }
 
 void loadProfile(unsigned int targetProfile) {
-  tft.fillScreen(ST7735_GREEN);
-  tft.setTextColor(ST7735_BLACK);
-  tft.setCursor(10, 50);
-  tft.print("Loading profile ");
-  tft.print(targetProfile);
-
+  memoryFeedbackScreen(activeProfileId, true);
   bool ok = loadParameters(targetProfile);
 
 #if 0
@@ -1380,11 +1381,15 @@ void loadProfile(unsigned int targetProfile) {
   delay(500);
 }
 
+//#define WITH_CHECKSUM 1
+
 bool saveParameters(uint8_t profile) {
 #ifndef PIDTUNE
   uint16_t offset = profile * sizeof(Profile_t);
 
+#ifdef WITH_CHECKSUM
   activeProfile.checksum = crc8((uint8_t *)&activeProfile, sizeof(Profile_t) - sizeof(uint8_t));
+#endif
 
   do {} while (!(eeprom_is_ready()));
   eeprom_write_block(&activeProfile, (void *)offset, sizeof(Profile_t));
@@ -1398,7 +1403,11 @@ bool loadParameters(uint8_t profile) {
   do {} while (!(eeprom_is_ready()));
   eeprom_read_block(&activeProfile, (void *)offset, sizeof(Profile_t));
 
+#ifdef WITH_CHECKSUM
   return activeProfile.checksum == crc8((uint8_t *)&activeProfile, sizeof(Profile_t) - sizeof(uint8_t));
+#else
+  return true;  
+#endif
 }
 
 bool savePID() {
@@ -1427,7 +1436,7 @@ bool firstRun() {
   return true;
 }
 
-void makeDefaultProfile(void) {
+void makeDefaultProfile() {
   activeProfile.soakTemp     = 130;
   activeProfile.soakDuration =  80;
   activeProfile.peakTemp     = 220;
@@ -1452,30 +1461,6 @@ void factoryReset() {
 
   fanAssistSpeed = 33;
   saveFanSpeed();
-
-  // https://controls.engin.umich.edu/wiki/index.php/PIDDownsides
-  // http://sts.bwk.tue.nl/7y500/readers/.%5CInstellingenRegelaars_ExtraStof.pdf
-  // http://coralux.net/wp-content/uploads/2013/08/reflow_oven_03.png
-/*
-#define PID_KP_PREHEAT 40 
-#define PID_KI_PREHEAT 0.025 
-#define PID_KD_PREHEAT 20 
-
-#define PID_KP_SOAK 200
-#define PID_KI_SOAK 0.015 
-#define PID_KD_SOAK 50 
-
-#define PID_KP_REFLOW 100 
-#define PID_KI_REFLOW 0.025 
-#define PID_KD_REFLOW 25
-*/
-// 4.00, 0.05,  2.00
-// 5.00, 0.01, 20.00
-
-// Results of Autotune a 1350W Oven
-// Setpoint 100°C -> Kp: 1.01, Ki: 0.01, Kd: 19.71
-// Setpoint 175°C -> Kp: 0.52, Ki: 0.01, Kd:  6.45
-// Setpoint 210°C -> Kp: 0.43, Ki: 0.01, Kd: 12.57
 
   heaterPID.Kp =  0.60; 
   heaterPID.Ki =  0.01;
