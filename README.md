@@ -27,11 +27,8 @@ in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
 ## Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
 
-![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg)
-
-
 **Post action shot**
-![CycleWithOverflow] | &nbsp;
+![CycleWithOverflow] | ![Warning]
 ------------ | -------------
 
 **Completed build**
@@ -235,7 +232,7 @@ THE SOFTWARE.
 [PIDValues]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/PIDValues.jpg
 [ProfileSettingsEdit]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/ProfileSettingsEdit.jpg
 
-
+[Warning]:http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg
 [ImgPCB]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.brd.preview.png
 [ImgSCH]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.sch.preview.png
 
