@@ -1,10 +1,10 @@
 Reflow Oven Controller
 ====================
 
-News
-====================
 
-Some PCBs & parts are available on Tindie.
+**News**
+
+* Some PCBs & parts are available on Tindie.
 <a href="https://www.tindie.com/stores/0xPIT/?ref=offsite_badges&utm_source=sellers_0xPIT&utm_medium=badges&utm_campaign=badge_small"><img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-smalls.png" alt="I sell on Tindie" height="40"></a>
 
 
@@ -27,7 +27,7 @@ in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
 ## Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
 
-![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg =250x)
+![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg)
 
 
 **Post action shot**
@@ -35,7 +35,7 @@ in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
 **Completed build**
 
-![](https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed1.png =250x) | ![](https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed2.png =250x)
+![Completed1] | ![Completed2]
 ------------ | -------------
 
 
