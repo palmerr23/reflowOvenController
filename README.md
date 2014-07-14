@@ -238,6 +238,6 @@ THE SOFTWARE.
 [ImgPCB]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.brd.preview.png
 [ImgSCH]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.sch.preview.png
 
-[ImgMissingTrace]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/MissingTrace.png
-[Completed1]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed1.png
-[Completed2]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed2.png
+[ImgMissingTrace]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/MissingTrace.jpg
+[Completed1]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed1.jpg
+[Completed2]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed2.jpg
