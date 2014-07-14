@@ -26,7 +26,7 @@
 #endif
 // ----------------------------------------------------------------------------
 
-const char * ver = "3.0";
+const char * ver = "3.1";
 
 // ----------------------------------------------------------------------------
 
@@ -608,12 +608,12 @@ Channel_t Channels[CHANNELS] = {
 uint16_t zxLoopDelay = 0;
 
 // calibrate zero crossing: how many timerIsr happen within one zero crossing
-#define zxCalibrationLoops 32
+#define zxCalibrationLoops 64
 struct {
   volatile int8_t iterations;
   volatile uint8_t measure[zxCalibrationLoops];
 } zxLoopCalibration = {
-  zxCalibrationLoops, {}
+  0, {}
 };
 
 // ----------------------------------------------------------------------------
@@ -621,6 +621,10 @@ struct {
 // NB: use native port IO instead of digitalWrite for better performance
 void zeroCrossingIsr(void) {
   static uint8_t ch = 0;
+
+  if (zxLoopCalibration.iterations < zxCalibrationLoops) {
+    zxLoopCalibration.iterations++;
+  }
 
   // reset phase control timer
   phaseCounter = 0;
@@ -640,10 +644,6 @@ void zeroCrossingIsr(void) {
   Channels[ch].next = timerTicks + zxLoopDelay;
 
   ch = ((ch + 1) % CHANNELS); // next channel
-
-  if (zxLoopCalibration.iterations > 0) {
-    zxLoopCalibration.iterations--;
-  }
 }
 
 // ----------------------------------------------------------------------------
@@ -651,6 +651,10 @@ void zeroCrossingIsr(void) {
 
 void timerIsr(void) { // ticks with 100µS
   static uint32_t lastTicks = 0;
+
+  if (zxLoopCalibration.iterations < zxCalibrationLoops) {
+    zxLoopCalibration.measure[zxLoopCalibration.iterations]++;
+  }
 
   // phase control for the fan 
   if (++phaseCounter > 90) {
@@ -679,10 +683,6 @@ void timerIsr(void) { // ticks with 100µS
   }
 
   timerTicks++;
-
-  if (zxLoopCalibration.iterations >= 0) {
-    zxLoopCalibration.measure[zxLoopCalibration.iterations]++;
-  }
 }
 
 // ----------------------------------------------------------------------------
@@ -918,31 +918,11 @@ void setup() {
     loadLastUsedProfile();
   }
 
-  loadFanSpeed();
-  loadPID();
-
-  PID.SetOutputLimits(0, 100); // max output 100%
-  PID.SetMode(AUTOMATIC);
+  tft.fillScreen(ST7735_WHITE);
+  tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
   Timer1.initialize(100);
   Timer1.attachInterrupt(timerIsr);
-
-  // setup /CS line for thermocouple and read initial temperature
-  A.chipSelect = THERMOCOUPLE1_CS;
-  pinMode(A.chipSelect, OUTPUT);
-  digitalWrite(A.chipSelect, HIGH);
-#ifndef FAKE_HW
-  readThermocouple(&A);
-#endif
-  if (A.stat != 0) {
-    abortWithError(A.stat);
-  }
-
-  // initialize moving average filter
-  runningTotalRampRate = A.temperature * NUMREADINGS;
-  for(int i = 0; i < NUMREADINGS; i++) {
-    airTemp[i].temp = A.temperature;
-  }
 
 #ifndef FAKE_HW
   pinMode(PIN_ZX, INPUT_PULLUP);
@@ -952,9 +932,6 @@ void setup() {
   Timer3.initialize(1000); // x10 speed
   Timer3.attachInterrupt(zeroCrossingIsr);
 #endif
-
-  tft.fillScreen(ST7735_WHITE);
-  tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
 
 #ifdef WITH_SPLASH
   // splash screen
@@ -974,17 +951,35 @@ void setup() {
   delay(1000);
 #endif
 
+  // setup /CS line for thermocouple and read initial temperature
+  A.chipSelect = THERMOCOUPLE1_CS;
+  pinMode(A.chipSelect, OUTPUT);
+  digitalWrite(A.chipSelect, HIGH);
+#ifndef FAKE_HW
+  readThermocouple(&A);
+#endif
+  if (A.stat != 0) {
+    abortWithError(A.stat);
+  }
+
+  // initialize moving average filter
+  runningTotalRampRate = A.temperature * NUMREADINGS;
+  for(int i = 0; i < NUMREADINGS; i++) {
+    airTemp[i].temp = A.temperature;
+  }
+
 #ifndef FAKE_HW // autocalibrate zero cross timing delay
   tft.setCursor(7, 99);  
   tft.print("Calibrating... ");
   delay(400);
 #ifndef PIDTUNE
   while (zxLoopDelay == 0) {
-    if (zxLoopCalibration.iterations == 0) { // average tick measurements, dump 1st value
+    if (zxLoopCalibration.iterations == zxCalibrationLoops) { // average tick measurements, dump 1st value
       for (int8_t l = 0; l < zxCalibrationLoops; l++) {
         zxLoopDelay += zxLoopCalibration.measure[l];
       }
-      zxLoopDelay >>= 5; // / 32
+      zxLoopDelay /= zxCalibrationLoops;
+      zxLoopDelay -= 6; // compensating loop runtime
     }
   }
 #else
@@ -993,6 +988,12 @@ void setup() {
   tft.print(zxLoopDelay);
   delay(1500);
 #endif
+
+  loadFanSpeed();
+  loadPID();
+
+  PID.SetOutputLimits(0, 100); // max output 100%
+  PID.SetMode(AUTOMATIC);
 
   menuExit(Menu::actionDisplay); // reset to initial state
   Engine.navigate(&miCycleStart);
