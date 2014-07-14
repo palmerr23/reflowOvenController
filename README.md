@@ -49,8 +49,9 @@ This Reflow Oven Controller relies on an [Arduino Pro Micro], which is similar t
 As I believe it is not wise to have a mess of wiring and tiny breakout-boards for operating mains powered equipment, I've decided to design custom board with easily obtainable components.
 
 The hardware can be found in the [folder hardware], including the Eagle schematics and PCB layout files. It should fit the freemium version of Eagle. Here are preview images:
-![PCB][ImgPCB]
-![Schematic][ImgSCH]
+
+![PCB][ImgPCB] | ![Schematic][ImgSCH]
+------------ | -------------
 
 From my manufacturing run, I have some spare PCBs and parts. They are available at my [tindie store].
 
