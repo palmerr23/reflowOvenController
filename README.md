@@ -1,11 +1,14 @@
 Reflow Oven Controller
 ====================
 
-Some excess PCBs will be available on Tindie starting from 2014-07-10:
-<a href="https://www.tindie.com/stores/0xPIT/?ref=offsite_badges&utm_source=sellers_0xPIT&utm_medium=badges&utm_campaign=badge_small"><img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-smalls.png" alt="I sell on Tindie"width="200" height="55"></a>
+News
+====================
+
+Some PCBs & parts are available on Tindie.
+<a href="https://www.tindie.com/stores/0xPIT/?ref=offsite_badges&utm_source=sellers_0xPIT&utm_medium=badges&utm_campaign=badge_small"><img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-smalls.png" alt="I sell on Tindie" height="40"></a>
 
 
-Arduino-based reflow oven controller with:
+**Arduino-based reflow oven controller with:**
 * [PID] loop control
 * [Wave Packet] and [Phase Fired] control for AC outputs
 * graphic TFT LC-Display, drawing the temperature curves
@@ -24,11 +27,17 @@ in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
 ## Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
 
-![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg)
+![Warning](http://www.proshieldsafetysigns.co.uk/signs/59793_signs.jpg =250x)
 
 
-Post action shot:
+**Post action shot**
 ![CycleWithOverflow]
+
+**Completed build**
+
+![](https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed1.png =250x) | ![](https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed2.png =250x)
+------------ | -------------
+
 
 Introduction
 ====================
@@ -41,16 +50,25 @@ The hardware can be found in the [folder hardware], including the Eagle schemati
 ![PCB][ImgPCB]
 ![Schematic][ImgSCH]
 
-From my manufacturing run, I have some spare PCBs. You can contact me to get some (€15,- + p&p each).
+From my manufacturing run, I have some spare PCBs and parts. They are available at my [tindie store].
 
 The board contains the [Arduino Pro Micro], very simple [Zero crossing] detection circuit, used to align control logic to mains frequency, two [MAX31855] thermocouple-to-digital converters and two [Sharp S202S01] PCB-mount solid state relays, mounted on cheap [Fischer SK409 50,8] heat sinks. The current software uses only one of the thermocouples, so you need to populate one IC only. If you're lucky, you can get free samples of the MAX31855 from Maxim.
-
 
 The software uses [PID] control of the heater and fan output for improved temperature stability. The heater AC load is controlled using [Wave Packet] control in order to minimize RF interference and load on the relay. For the fan motor, [Phase Fired] control has been implemented.
 
 Please note that all important timings are *based on the mains frequency*, so the circuit will **not work** properly without mains connection.
 
 But for testing, I've added an additional timer to simulate the zero-crossings, in order to run the software without being connected to mains. The software should work in 50 and 60Hz mains, the 60Hz version is not tested, though.
+
+Errata and construction infos
+========
+* Unfortunately, a trace is missing on the production PCB, you need to solder a bridge like this:
+![Missing Trace][ImgMissingTrace]
+The PCB eagle source has been corrected.
+
+* I've used a switch mode power supply which induces a lot of noise on the power supply, causing the MAX31855 to be quite eratic, reporting VCC and GND shots where there are none. 
+Use a linear power supply if you can. I've added a LC-filter (100µH+1000µF||100n) + ferrite beads between the PSU and the controller PCB.
+
 
 Screenshots and usage information
 ========
@@ -204,7 +222,7 @@ THE SOFTWARE.
 [Menu]:https://github.com/0xPIT/menu
 [ClickEncoder]:https://github.com/0xPIT/encoder
 [Arduino Pro Micro]:https://www.sparkfun.com/products/12640
-
+[tindie store]:https://www.tindie.com/products/0xPIT/reflow-oven-controller-motherboard-for-arduino-pro-micro/
 
 [CycleWithOverflow]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/CycleWithOverflow.jpg
 [FanSpeedEdit]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/FanSpeedEdit.jpg
@@ -219,3 +237,7 @@ THE SOFTWARE.
 
 [ImgPCB]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.brd.preview.png
 [ImgSCH]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/hardware/v0.2.sch.preview.png
+
+[ImgMissingTrace]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/MissingTrace.png
+[Completed1]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed1.png
+[Completed2]:https://raw.githubusercontent.com/0xPIT/reflowOvenController/master/images/Completed2.png
