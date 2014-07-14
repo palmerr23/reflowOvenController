@@ -5,6 +5,7 @@ Reflow Oven Controller
 **News**
 
 * Some PCBs & parts are available on Tindie.
+
 <a href="https://www.tindie.com/stores/0xPIT/?ref=offsite_badges&utm_source=sellers_0xPIT&utm_medium=badges&utm_campaign=badge_small"><img src="https://d2ss6ovg47m0r5.cloudfront.net/badges/tindie-smalls.png" alt="I sell on Tindie" height="40"></a>
 
 
