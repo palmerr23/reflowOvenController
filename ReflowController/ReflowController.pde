@@ -1381,7 +1381,7 @@ void loadProfile(unsigned int targetProfile) {
   delay(500);
 }
 
-//#define WITH_CHECKSUM 1
+#define WITH_CHECKSUM 1
 
 bool saveParameters(uint8_t profile) {
 #ifndef PIDTUNE
