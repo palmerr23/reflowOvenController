@@ -6,7 +6,6 @@
 
 //#define FAKE_HW 1
 //#define PIDTUNE 1 // autotune wouldn't fit in the 28k available on my arduino pro micro.
-//#define WITH_SPLASH 1
 
 #include <avr/eeprom.h>
 #include <EEPROM.h>
@@ -43,7 +42,6 @@ const char * ver = "3.0";
 #define LCD_DC   7
 #define LCD_RST  8
 #else 
-// 1.8 TFT test handsoldered on v0 pcb
 #define LCD_CS   10
 #define LCD_DC   9
 #define LCD_RST  8
@@ -63,7 +61,7 @@ const char * ver = "3.0";
 
 // ----------------------------------------------------------------------------
 
-#define WITH_SPLASH 1
+//#define WITH_SPLASH 1
 
 // ----------------------------------------------------------------------------
 
@@ -514,7 +512,6 @@ void renderMenuItem(const Menu::Item_t *mi, uint8_t pos) {
     tft.print(' '); tft.print(buf); tft.print("   ");
   }
 
-
   // mark items that have children
   if (Engine.getChild(mi) != &Menu::NullItem) {
     tft.print(" \x10   "); // 0x10 -> filled right arrow
@@ -554,8 +551,6 @@ MenuItem(miFactoryReset, "Factory Reset", Menu::NullItem, miPidSettings, miExit,
 // ----------------------------------------------------------------------------
 
 #define NUMREADINGS 10
-
-//double airTemp[NUMREADINGS];
 
 typedef struct {
   double temp;
@@ -615,7 +610,7 @@ uint16_t zxLoopDelay = 0;
 // calibrate zero crossing: how many timerIsr happen within one zero crossing
 #define zxCalibrationLoops 25
 struct {
-  volatile uint8_t iterations;
+  volatile int8_t iterations;
   volatile uint8_t measure[zxCalibrationLoops];
 } zxLoopCalibration = {
   zxCalibrationLoops, {}
@@ -646,7 +641,7 @@ void zeroCrossingIsr(void) {
 
   ch = ((ch + 1) % CHANNELS); // next channel
 
-  if (zxLoopCalibration.iterations) {
+  if (zxLoopCalibration.iterations > 0) {
     zxLoopCalibration.iterations--;
   }
 }
@@ -685,7 +680,7 @@ void timerIsr(void) { // ticks with 100µS
 
   timerTicks++;
 
-  if (zxLoopCalibration.iterations) {
+  if (zxLoopCalibration.iterations >= 0) {
     zxLoopCalibration.measure[zxLoopCalibration.iterations]++;
   }
 }
@@ -698,19 +693,34 @@ void abortWithError(int error) {
   tft.setTextColor(ST7735_WHITE, ST7735_RED);
   tft.fillScreen(ST7735_RED);
 
-  tft.setCursor(10,10);
+  tft.setCursor(10, 10);
   
-  if (error == 3) {
-    tft.println("Thermocouple input"); 
-    tft.println("open circuit");
-    tft.println("Power off &");
+  if (error < 9) {
+    tft.println("Thermocouple Error");
+    tft.setCursor(10, 30);
+    switch (error) {
+      case 0b001:
+        tft.println("Open Circuit");
+        break;
+      case 0b010:
+        tft.println("GND Short");
+        break;
+      case 0b100:
+        tft.println("VCC Short");
+        break;
+    }
+    tft.setCursor(10, 60);
+    tft.println("Power off,");
+    tft.setCursor(10, 75);
     tft.println("check connections");
   }
   else {
     tft.println("Temperature"); 
+    tft.setCursor(10, 30);
     tft.println("following error");
-    tft.println("during ");
-    tft.println((error == 1) ? "heating" : "cooling");
+    tft.setCursor(10, 45);
+    tft.print("during ");
+    tft.println((error == 10) ? "heating" : "cooling");
   }
 
   while (1) { //  stop
@@ -771,7 +781,7 @@ void updateProcessDisplay() {
     tmp = h / (activeProfile.peakTemp * 1.10) * 100.0;
     pxPerC = (uint16_t)tmp;
     
-#if 0 // FIXME pxPerS should be calculated from the selected profile
+#if 0 // pxPerS should be calculated from the selected profile, wint fit in flash right now
     double estimatedTotalTime = 60 * 12;
     // estimate total run time for current profile
     estimatedTotalTime = activeProfile.soakDuration + activeProfile.peakDuration;
@@ -893,16 +903,9 @@ void updateProcessDisplay() {
 // ----------------------------------------------------------------------------
 
 void setup() {
-  //Serial.begin(57600);
-
   setupRelayPins();
 
-#ifdef FAKE_HW
-  tft.initR(INITR_REDTAB); // INITR_GREENTAB;
-#else
   tft.initR(INITR_BLACKTAB);
-#endif
-
   tft.setTextWrap(false);
   tft.setTextSize(1);
   tft.setRotation(1);
@@ -921,15 +924,18 @@ void setup() {
   PID.SetOutputLimits(0, 100); // max output 100%
   PID.SetMode(AUTOMATIC);
 
-  // setup /CS line for thermocouple and read
+  Timer1.initialize(100);
+  Timer1.attachInterrupt(timerIsr);
+
+  // setup /CS line for thermocouple and read initial temperature
   A.chipSelect = THERMOCOUPLE1_CS;
-  digitalWrite(A.chipSelect, HIGH);
   pinMode(A.chipSelect, OUTPUT);
+  digitalWrite(A.chipSelect, HIGH);
 #ifndef FAKE_HW
   readThermocouple(&A);
 #endif
   if (A.stat != 0) {
-    abortWithError(3);
+    abortWithError(A.stat);
   }
 
   // initialize moving average filter
@@ -937,9 +943,6 @@ void setup() {
   for(int i = 0; i < NUMREADINGS; i++) {
     airTemp[i].temp = A.temperature;
   }
-
-  Timer1.initialize(100);
-  Timer1.attachInterrupt(timerIsr);
 
 #ifndef FAKE_HW
   pinMode(PIN_ZX, INPUT_PULLUP);
@@ -976,13 +979,13 @@ void setup() {
   tft.print("Calibrating... ");
   delay(400);
 #ifndef PIDTUNE
+  // TODO: should be optimized so that the tick timer starts at first zx
   while (zxLoopDelay == 0) {
-    if (zxLoopCalibration.iterations < 1) {
-      for (uint8_t l = 0; l < zxCalibrationLoops; l++) {
+    if (zxLoopCalibration.iterations == 0) { // average tick measurements, dump 1st value
+      for (int8_t l = 0; l < zxCalibrationLoops; l++) {
         zxLoopDelay += zxLoopCalibration.measure[l];
       }
-      zxLoopDelay /= zxCalibrationLoops;
-      zxLoopDelay -= 6; // calibration offset: loop runtime
+      zxLoopDelay /= (zxCalibrationLoops - 1);
     }
   }
 #else
@@ -1032,7 +1035,7 @@ void toggleAutoTune() {
     PIDTune.SetOutputStep(aTuneStep);
     PIDTune.SetLookbackSec((int)aTuneLookBack);
   }
-  else { //cancel autotune
+  else { // cancel autotune
     PIDTune.Cancel();
     currentState = CoolDown;
   }
@@ -1040,6 +1043,8 @@ void toggleAutoTune() {
 #endif // PIDTUNE
 
 // ----------------------------------------------------------------------------
+
+uint8_t thermocoupleErrorCount;
 
 void loop(void) 
 {
@@ -1083,18 +1088,6 @@ void loop(void)
         }
       }
       break;
-#if 0
-    case ClickEncoder::Held:
-      if (currentState < UIMenuEnd) { // enter settings menu // FIXME not always good
-        tft.fillScreen(ST7735_WHITE);
-        tft.setTextColor(ST7735_BLACK, ST7735_WHITE);
-
-        Engine.navigate(&miCycleStart);
-        currentState = Settings;
-        menuUpdateRequest = true;
-      } 
-      break;
-#endif
   }
 
   // --------------------------------------------------------------------------
@@ -1138,9 +1131,23 @@ void loop(void)
     A.temperature = encAbsolute;
 #endif
 
-    if (A.stat != 0) {
-      abortWithError(3);
+    if (A.stat > 0) {
+      thermocoupleErrorCount++;
     }
+    else {
+      thermocoupleErrorCount = 0;
+    }
+
+    if (thermocoupleErrorCount > 5) { // bail out after 5 consecutive tc errors
+      abortWithError(A.stat);
+    }
+
+/// debug
+    tft.setCursor(10, 40);
+    for (uint8_t mask = B111; mask; mask >>= 1) {
+      tft.print(mask & A.stat ? '1' : '0');
+    }
+/// debug
   
     // rolling average of the temp T1 and T2
     totalT1 -= readingsT1[index];       // subtract the last reading
@@ -1265,7 +1272,7 @@ void loop(void)
       case Tune:
         {
           Setpoint = 210.0;
-          byte val = PIDTune.Runtime();
+          int8_t val = PIDTune.Runtime();
           PIDTune.setpoint = 210.0;
 
           if (val != 0) {
@@ -1296,8 +1303,8 @@ void loop(void)
   // if the thermocouple is wired backwards, temp goes DOWN when it increases
   // during cooling, the t962a lags a long way behind, hence the hugely lenient cooling allowance.
   // both of these errors are blocking and do not exit!
-  //if (Setpoint > Input + 50) abortWithError(1); // if we're 50 degree cooler than setpoint, abort
-  //if (Input > Setpoint + 50) abortWithError(2); // or 50 degrees hotter, also abort
+  //if (Setpoint > Input + 50) abortWithError(10); // if we're 50 degree cooler than setpoint, abort
+  //if (Input > Setpoint + 50) abortWithError(20); // or 50 degrees hotter, also abort
   
 #ifndef PIDTUNE
   PID.Compute();
