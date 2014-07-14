@@ -50,8 +50,8 @@ As I believe it is not wise to have a mess of wiring and tiny breakout-boards fo
 
 The hardware can be found in the [folder hardware], including the Eagle schematics and PCB layout files. It should fit the freemium version of Eagle. Here are preview images:
 
-![PCB][ImgPCB] | ![Schematic][ImgSCH]
------------- | -------------
+![PCB][ImgPCB]
+![Schematic][ImgSCH]
 
 From my manufacturing run, I have some spare PCBs and parts. They are available at my [tindie store].
 
