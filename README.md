@@ -25,11 +25,15 @@ Reflow Oven Controller
 (c) 2014 Karl Pitrich <karl@pitrich.com>
 in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
 
-## Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
 
 **Post action shot**
+
 ![CycleWithOverflow] | ![Warning]
 ------------ | -------------
+
+
+## Warning: This project operates with possibly lethal mains voltage. If you are unsure what to do, don't do it and get help from an experienced tinkerer with professional training.
+
 
 **Completed build**
 
