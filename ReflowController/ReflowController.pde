@@ -7,6 +7,11 @@
 //#define FAKE_HW 1
 //#define PIDTUNE 1 // autotune wouldn't fit in the 28k available on my arduino pro micro.
 
+// run a calibration loop that measures how many timer ticks occur between 2 zero corssings
+// FIXME: does not work reliably at the moment, so a oscilloscope-determined value is used.
+//#define WITH_CALIBRATION 1 // loop timing calibration
+#define DEFAULT_LOOP_DELAY 89 // should be about 16% less for 60Hz mains
+
 #include <avr/eeprom.h>
 #include <EEPROM.h>
 #include <PID_v1.h>
@@ -101,7 +106,7 @@ Thermocouple A;
 
 // ----------------------------------------------------------------------------
 
-uint32_t startZeroCrossTicks;
+uint32_t startCycleZeroCrossTicks;
 uint32_t lastUpdate = 0;
 uint32_t lastDisplayUpdate = 0;
 
@@ -469,7 +474,7 @@ void toggleAutoTune();
 
 bool cycleStart(const Menu::Action_t action) {
   if (action == Menu::actionDisplay) {
-    startZeroCrossTicks = zeroCrossTicks;
+    startCycleZeroCrossTicks = zeroCrossTicks;
     menuExit(action);
 
 #ifndef PIDTUNE    
@@ -572,7 +577,8 @@ uint8_t index = 0;              // the index of the current reading
 //
 void setupRelayPins(void) {
   DDRD  |= (1 << 2) | (1 << 3); // output
-  PORTD &= ~((1 << 2) | (1 << 3));
+  //PORTD &= ~((1 << 2) | (1 << 3));
+  PORTD |= (1 << 2) | (1 << 3); // off
 }
 
 void killRelayPins(void) {
@@ -607,24 +613,22 @@ Channel_t Channels[CHANNELS] = {
 // delay to align relay activation with the actual zero crossing
 uint16_t zxLoopDelay = 0;
 
+#ifdef WITH_CALIBRATION
 // calibrate zero crossing: how many timerIsr happen within one zero crossing
-#define zxCalibrationLoops 64
+#define zxCalibrationLoops 128
 struct {
   volatile int8_t iterations;
   volatile uint8_t measure[zxCalibrationLoops];
 } zxLoopCalibration = {
   0, {}
 };
+#endif
 
 // ----------------------------------------------------------------------------
 // Zero Crossing ISR; per ZX, process one channel per interrupt only
 // NB: use native port IO instead of digitalWrite for better performance
 void zeroCrossingIsr(void) {
   static uint8_t ch = 0;
-
-  if (zxLoopCalibration.iterations < zxCalibrationLoops) {
-    zxLoopCalibration.iterations++;
-  }
 
   // reset phase control timer
   phaseCounter = 0;
@@ -641,9 +645,15 @@ void zeroCrossingIsr(void) {
   else {
     Channels[ch].action = true;
   }
-  Channels[ch].next = timerTicks + zxLoopDelay;
+  Channels[ch].next = timerTicks + zxLoopDelay; // delay added to reach the next zx
 
   ch = ((ch + 1) % CHANNELS); // next channel
+
+#ifdef WITH_CALIBRATION
+  if (zxLoopCalibration.iterations < zxCalibrationLoops) {
+    zxLoopCalibration.iterations++;
+  }
+#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -651,10 +661,6 @@ void zeroCrossingIsr(void) {
 
 void timerIsr(void) { // ticks with 100µS
   static uint32_t lastTicks = 0;
-
-  if (zxLoopCalibration.iterations < zxCalibrationLoops) {
-    zxLoopCalibration.measure[zxLoopCalibration.iterations]++;
-  }
 
   // phase control for the fan 
   if (++phaseCounter > 90) {
@@ -683,6 +689,12 @@ void timerIsr(void) { // ticks with 100µS
   }
 
   timerTicks++;
+
+#ifdef WITH_CALIBRATION
+  if (zxLoopCalibration.iterations < zxCalibrationLoops) {
+    zxLoopCalibration.measure[zxLoopCalibration.iterations]++;
+  }
+#endif
 }
 
 // ----------------------------------------------------------------------------
@@ -811,7 +823,7 @@ void updateProcessDisplay() {
   }
 
   // elapsed time
-  uint16_t elapsed = (zeroCrossTicks - startZeroCrossTicks) / 100;
+  uint16_t elapsed = (zeroCrossTicks - startCycleZeroCrossTicks) / 100;
   tft.setCursor(125, y);
   alignRightPrefix(elapsed); 
   tft.print(elapsed);
@@ -968,25 +980,24 @@ void setup() {
     airTemp[i].temp = A.temperature;
   }
 
-#ifndef FAKE_HW // autocalibrate zero cross timing delay
+#ifdef WITH_CALIBRATION
   tft.setCursor(7, 99);  
   tft.print("Calibrating... ");
   delay(400);
-#ifndef PIDTUNE
+
+  // FIXME: does not work reliably
   while (zxLoopDelay == 0) {
     if (zxLoopCalibration.iterations == zxCalibrationLoops) { // average tick measurements, dump 1st value
       for (int8_t l = 0; l < zxCalibrationLoops; l++) {
         zxLoopDelay += zxLoopCalibration.measure[l];
       }
       zxLoopDelay /= zxCalibrationLoops;
-      zxLoopDelay -= 6; // compensating loop runtime
+      zxLoopDelay -= 10; // compensating loop runtime
     }
   }
-#else
-  zxLoopDelay = 90; // calibration did not fit in flash...
-#endif
   tft.print(zxLoopDelay);
-  delay(1500);
+#else
+  zxLoopDelay = DEFAULT_LOOP_DELAY;
 #endif
 
   loadFanSpeed();
@@ -994,6 +1005,8 @@ void setup() {
 
   PID.SetOutputLimits(0, 100); // max output 100%
   PID.SetMode(AUTOMATIC);
+
+  delay(1000);
 
   menuExit(Menu::actionDisplay); // reset to initial state
   Engine.navigate(&miCycleStart);
@@ -1151,7 +1164,7 @@ void loop(void)
       tft.print(mask & A.stat ? '1' : '0');
     }
 #endif
-  
+      
     // rolling average of the temp T1 and T2
     totalT1 -= readingsT1[index];       // subtract the last reading
     readingsT1[index] = A.temperature;
