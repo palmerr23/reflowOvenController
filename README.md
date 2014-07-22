@@ -22,6 +22,7 @@ Reflow Oven Controller
   * measure two temperatures independently
   * drive two AC loads, such as heater and fan
 * could also be used for slow coockers
+* *Please Note*: Requires Arduino IDE 1.5.x or newer
 
 (c) 2014 Karl Pitrich <karl@pitrich.com>
 in part based on a project (c) 2013 Ed Simmons <ed@estechnical.co.uk>
