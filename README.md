@@ -14,7 +14,7 @@ Reflow Oven Controller
 * [Wave Packet] and [Phase Fired] control for AC outputs
 * graphic TFT LC-Display, drawing the temperature curves
   * using an [Adafruit 1.8" TFT] or derivate display
-* solely controlled using a cheap rotary encoder and it's single button
+* solely controlled using a cheap rotary encoder and its single button
 * stores up to 30 temperature profiles in EEPROM
 * configurable PID-parameters
 * simple, small hardware to drive loads up to 600V and up to 8A
