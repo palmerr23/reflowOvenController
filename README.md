@@ -121,7 +121,7 @@ On a Mac, this is how you link the submodule libraries to your Arduino libraries
     cd ~/Documents/Arduino/Libraries
     ln -s ~/Development/<reflow source code>/libraries
     
-My code uses [TimerOne] for basic timing, for the 1.8" TFT I've used [Adafruit_ST7735], which requires [Adafruit_GFX]. I **strongly suggest** to use my **modified version** of [Adafruit_GFX-pit], as it **performs much better**, but requires you to use SPI, which my board does anyway.
+My code uses [TimerOne] for basic timing, for the 1.8" TFT I've used [Adafruit_ST7735], which requires [Adafruit_GFX]. I **strongly suggest** to use my **modified version** of [Adafruit_ST7735-pit], as it **performs much better**, but requires you to use SPI, which my board does anyway.
 
 For the user interface you require my own [Menu] and [ClickEncoder] libraries, which are included as submodules.
 
@@ -208,7 +208,7 @@ THE SOFTWARE.
 [TimerThree]:http://playground.arduino.cc/Code/Timer1
 [Adafruit_ST7735]:https://github.com/adafruit/Adafruit-ST7735-Library
 [Adafruit_GFX]:https://github.com/adafruit/Adafruit-GFX-Library
-[Adafruit_GFX-pit]:https://github.com/0xPIT/Adafruit-ST7735-Library
+[Adafruit_ST7735-pit]:https://github.com/0xPIT/Adafruit-ST7735-Library
 [Menu]:https://github.com/0xPIT/menu
 [ClickEncoder]:https://github.com/0xPIT/encoder
 [Arduino Pro Micro]:https://www.sparkfun.com/products/12640
