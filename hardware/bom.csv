@@ -20,7 +20,7 @@ K1,S202S01,S202S01,S102S01,Low Height Type Solid State Relays SHARP
 K2,S202S01,S202S01,S102S01,Low Height Type Solid State Relays SHARP
 KK1,SK104-PAD,SK104-PAD,SK104-PAD,HEATSINK manufacturer Fischer/distributor Buerklin
 KK2,SK104-PAD,SK104-PAD,SK104-PAD,HEATSINK manufacturer Fischer/distributor Buerklin
-OC1,H11A1M,H11A1M,DIL06,General Purpose 6-Pin Phototransistor Optocouplers
+OC1,H11AA1,H11AA1,DIL06,General Purpose 6-Pin Phototransistor Optocouplers
 R1,100R,R-EU_0207/5V,0207/5V,RESISTOR. European symbol
 R2,100R,R-EU_0207/5V,0207/5V,RESISTOR. European symbol
 R3,120R,R-EU_R0603,R0603,RESISTOR. European symbol
