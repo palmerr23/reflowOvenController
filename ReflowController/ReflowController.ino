@@ -14,7 +14,7 @@
 
 #include <avr/eeprom.h>
 #include <EEPROM.h>
-#include <PID_v1.h>
+#include "Oven_PID.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <SPI.h>
