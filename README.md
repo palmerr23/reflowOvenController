@@ -1,9 +1,8 @@
 Reflow Oven Controller
 ====================
 
-
 **News**
 
-Please use Karl's main branch.
+Karl's main branch is at https://github.com/0xPIT/reflowOvenController
 
-https://github.com/0xPIT/reflowOvenController
+Forked here at https://github.com/palmerr23/reflowOvenController-1
